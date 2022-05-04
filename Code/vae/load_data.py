@@ -1,14 +1,12 @@
-from torch.utils.data import DataLoader, Dataset
-import scipy.io
-import scipy
-import scipy.signal as ss
-import numpy as np
-import torch
 import os
 from os.path import isfile
-import wfdb
+
+import numpy as np
+import scipy
+import scipy.io
+import torch
 from pytorch_lightning import LightningDataModule
-from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, Dataset
 
 PAIRED_DATA_DIR = 'Data/preprocessed_data/paired_data'
 NUM_WORKERS = 8
@@ -23,14 +21,14 @@ def load_data(data_dir: str):
         if isfile(true_fname) and fname != '.DS_Store':
             dataset.append(true_fname)
 
-    #train_data, test_val_data = train_test_split(dataset, test_size=0.5)
-    #test_data, val_data = train_test_split(test_val_data, test_size=0.5)
+    # train_data, test_val_data = train_test_split(dataset, test_size=0.5)
+    # test_data, val_data = train_test_split(test_val_data, test_size=0.5)
 
-    return np.array(dataset, dtype = object)
+    return np.array(dataset, dtype=object)
 
 
 class ECGDataset(Dataset):
-    def __init__(self, window_size, data_dir = PAIRED_DATA_DIR, dataset_type: str = None, split: str = 'train'):
+    def __init__(self, window_size, data_dir=PAIRED_DATA_DIR, dataset_type: str = None, split: str = 'train'):
         super(ECGDataset, self).__init__()
         # self.train_data, self.val_data, self.test_data = load_data(data_dir)
         self.dataset = load_data(f'{data_dir}/{split}')

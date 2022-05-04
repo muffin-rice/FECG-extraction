@@ -1,23 +1,22 @@
-import torch
-from torch import nn, optim
-import torch.nn.functional as F
-from torch.distributions import Normal
 import pytorch_lightning as pl
+import torch
+import torch.nn.functional as F
 from scipy.signal import istft
-import numpy as np
-from collections import namedtuple
+from torch import nn
+from torch.distributions import Normal
 
 
 def invert_stft(stft_sig):
-    x = stft_sig[:,:17,:] + 1j * stft_sig[:,17:,:]
-    orig_sig = istft(x, fs=125, nperseg=32, noverlap=31, input_onesided=True, boundary = False)[1]
+    x = stft_sig[:, :17, :] + 1j * stft_sig[:, 17:, :]
+    orig_sig = istft(x, fs=125, nperseg=32, noverlap=31, input_onesided=True, boundary=False)[1]
     return orig_sig
 
 
-def invert_stft_batch(stft_sig): #batch_size x num_c x 34 x 469
+def invert_stft_batch(stft_sig):  # batch_size x num_c x 34 x 469
     stft_sig1 = stft_sig[:, 0, :, :]
-    complex_stft = torch.complex(stft_sig1[:,:17,:], stft_sig1[:,17:,:])
-    return torch.istft(complex_stft, n_fft=32, hop_length=1, onesided=True, return_complex=False, length=500) # win_length=32,
+    complex_stft = torch.complex(stft_sig1[:, :17, :], stft_sig1[:, 17:, :])
+    return torch.istft(complex_stft, n_fft=32, hop_length=1, onesided=True, return_complex=False,
+                       length=500)  # win_length=32,
     # x = []
     # for ent in range(stft_sig.shape[0]):
     #     x.append(invert_stft(stft_sig[ent, :, :, :]))
@@ -49,20 +48,20 @@ class ResizeConv2d(nn.Module):
 class BasicBlockEnc(nn.Module):
     '''double conv + skip connection'''
 
-    def __init__(self, in_channels, out_channels, kernel_size=(3, 3), stride=(2,2), num_blocks = 2):
+    def __init__(self, in_channels, out_channels, kernel_size=(3, 3), stride=(2, 2), num_blocks=2):
         super().__init__()
 
         convs = []
         curr_channels = in_channels
         for i in range(num_blocks):
-            convs.append(nn.Conv2d(curr_channels, out_channels, kernel_size=kernel_size, stride=(1,1), padding='same'))
+            convs.append(nn.Conv2d(curr_channels, out_channels, kernel_size=kernel_size, stride=(1, 1), padding='same'))
             curr_channels = out_channels
             convs.append(nn.BatchNorm2d(curr_channels))
             convs.append(nn.ReLU())
 
         self.convs = nn.Sequential(*convs)
 
-        if stride != (1,1):
+        if stride != (1, 1):
             first_padding = 'valid'
         else:
             first_padding = 'same'
@@ -92,23 +91,23 @@ class BasicBlockEnc(nn.Module):
 class ResNet18Enc(nn.Module):
     '''applies 4 downsampling basic resnet blocks'''
 
-    def __init__(self, z_dim=30, start_channels = 2, num_blocks = (2,2,2,1)):
+    def __init__(self, z_dim=30, start_channels=2, num_blocks=(2, 2, 2, 1)):
         super().__init__()
         channels = [start_channels, 64, 128, 256, 512]
         self.z_dim = z_dim
         self.layer1 = self._make_layer(BasicBlockEnc, (channels[0], channels[1]), num_blocks[0], stride=2)
         self.layer2 = self._make_layer(BasicBlockEnc, (channels[1], channels[2]), num_blocks[1], stride=2)
         self.layer3 = self._make_layer(BasicBlockEnc, (channels[2], channels[3]), num_blocks[2], stride=1)
-        #self.layer4 = self._make_layer(BasicBlockEnc, (channels[3], channels[4]), num_blocks[3], stride=2)
-        self.pool = nn.MaxPool2d((5,14))
+        # self.layer4 = self._make_layer(BasicBlockEnc, (channels[3], channels[4]), num_blocks[3], stride=2)
+        self.pool = nn.MaxPool2d((5, 14))
         self.linears = nn.Sequential(*[nn.Linear(channels[3], 512), nn.ReLU()])
         self.mu_linear = nn.Linear(512, z_dim)
         y = nn.Linear(512, z_dim)
         self.var_linear = nn.Sequential(*[y, nn.BatchNorm1d(z_dim), nn.LeakyReLU(negative_slope=.2)])
 
     def _make_layer(self, block, planes, num_blocks, stride):
-        strides = (stride, 2*stride)
-        layers = block(planes[0], planes[1], kernel_size=(3,6), stride=strides, num_blocks=num_blocks)
+        strides = (stride, 2 * stride)
+        layers = block(planes[0], planes[1], kernel_size=(3, 6), stride=strides, num_blocks=num_blocks)
         return layers
 
     def forward(self, x):
@@ -127,7 +126,7 @@ class ResNet18Enc(nn.Module):
 class BasicBlockDec(nn.Module):
     '''double conv + upsample'''
 
-    def __init__(self, in_channels, out_channels=None, kernel_size=(3, 3), stride=(1, 1), num_blocks = 1):
+    def __init__(self, in_channels, out_channels=None, kernel_size=(3, 3), stride=(1, 1), num_blocks=1):
         # when upsampling, use stride to avoid artifacts as well
         super().__init__()
 
@@ -136,7 +135,8 @@ class BasicBlockDec(nn.Module):
 
         convs = []
         for i in range(num_blocks):
-            convs.append(nn.Conv2d(in_channels, in_channels, kernel_size=kernel_size, stride=(1, 1), padding='same', bias=False))
+            convs.append(
+                nn.Conv2d(in_channels, in_channels, kernel_size=kernel_size, stride=(1, 1), padding='same', bias=False))
             convs.append(nn.BatchNorm2d(in_channels))
             convs.append(nn.ReLU())
 
@@ -160,7 +160,7 @@ class BasicBlockDec(nn.Module):
 
 class ResNet18Dec(nn.Module):
 
-    def __init__(self, num_blocks=(2,2,2,1), z_dim=10, nc=1):
+    def __init__(self, num_blocks=(2, 2, 2, 1), z_dim=10, nc=1):
         super().__init__()
         planes = [256, 128, 64, nc]
         self.in_planes = planes[0]
@@ -174,9 +174,9 @@ class ResNet18Dec(nn.Module):
         # self.conv1 = ResizeConv3d(nc, 1, kernel_size=(1,1,1), scale_factor=1)
 
     def _make_layer(self, BasicBlockDec, planes, num_blocks, stride):
-        strides = (stride, 2*stride)
+        strides = (stride, 2 * stride)
         layers = []
-        layers += [BasicBlockDec(self.in_planes, planes, num_blocks = num_blocks, stride=strides)]
+        layers += [BasicBlockDec(self.in_planes, planes, num_blocks=num_blocks, stride=strides)]
         self.in_planes = planes
         return nn.Sequential(*layers)
 
@@ -194,7 +194,7 @@ class ResNet18Dec(nn.Module):
 
 class STFT_VAE(pl.LightningModule):
 
-    def __init__(self, log_dict, z_dim=20, learning_rate = 0.02, loss_ratio = 10000):
+    def __init__(self, log_dict, z_dim=20, learning_rate=0.02, loss_ratio=10000):
         super().__init__()
         self.log_dict = log_dict
         self.encoder = ResNet18Enc(z_dim=z_dim)
@@ -239,7 +239,6 @@ class STFT_VAE(pl.LightningModule):
     def calc_recon_loss_raw_mae(stft_recon, raw):
         return torch.mean(F.l1_loss(invert_stft_batch(stft_recon)[:, :, 1:], raw[:, :, 1:], reduction='none'))
 
-
     def forward(self, x):
         aecg_stft, fecg_stft, fecg_sig = x['aecg_stft'].float(), x['fecg_stft'].float(), x['fecg_sig'].float()
         mean, logvar = self.encoder(aecg_stft)
@@ -256,9 +255,9 @@ class STFT_VAE(pl.LightningModule):
         recon_loss_raw_mae = self.calc_recon_loss_raw_mae(x_recon.detach().numpy(), fecg_sig)
         kl_loss = torch.mean(self.kl_divergence(z, mean, std))
 
-        return {'x_recon': x_recon, 'recon_loss': recon_loss_mse, 'kl_loss': kl_loss, 'recon_loss_mse' : recon_loss_mse,
-                'recon_loss_mae' : recon_loss_mae, 'recon_loss_raw_mse' : recon_loss_raw_mse,
-                'recon_loss_raw_mae' : recon_loss_raw_mae}
+        return {'x_recon': x_recon, 'recon_loss': recon_loss_mse, 'kl_loss': kl_loss, 'recon_loss_mse': recon_loss_mse,
+                'recon_loss_mae': recon_loss_mae, 'recon_loss_raw_mse': recon_loss_raw_mse,
+                'recon_loss_raw_mae': recon_loss_raw_mae}
 
     def training_step(self, batch, batch_idx, device, optimizer_idx=0):
         self.curr_device = device
@@ -313,13 +312,14 @@ class ResizeConv1d(nn.Module):
 
 
 class Basic1DEnc(nn.Module):
-    def __init__(self, start_planes, end_planes, blocks=2, kernel_sizes = (13,9,5), downsample = (False, (None,), (None,)),
-                 final_bn_relu = False):
+    def __init__(self, start_planes, end_planes, blocks=2, kernel_sizes=(13, 9, 5),
+                 downsample=(False, (None,), (None,)),
+                 final_bn_relu=False):
         super().__init__()
 
-        bn = lambda planes : nn.BatchNorm1d(planes)
-        relu = lambda : nn.ReLU()
-        conv = lambda in_planes, out_planes, kernel_size : \
+        bn = lambda planes: nn.BatchNorm1d(planes)
+        relu = lambda: nn.ReLU()
+        conv = lambda in_planes, out_planes, kernel_size: \
             nn.Conv1d(in_channels=in_planes, out_channels=out_planes, kernel_size=kernel_size,
                       padding='same', stride=(1,))
 
@@ -346,23 +346,22 @@ class Basic1DEnc(nn.Module):
         else:
             self.downsample = nn.Identity()
 
-
     def forward(self, x):
         return self.downsample(self.bn_relu(self.shortcut(x) + self.convs(x)))
 
 
 class Encoder2D(nn.Module):
-    def __init__(self, z_dim=30, start_channels = 2):
+    def __init__(self, z_dim=30, start_channels=2):
         super().__init__()
-        self.in_planes = start_channels # initial number of planes
+        self.in_planes = start_channels  # initial number of planes
         self.z_dim = z_dim
-        planes = [start_channels,32,64,128,256,512]
-        strides = [5,2,  2,  2,  2]
+        planes = [start_channels, 32, 64, 128, 256, 512]
+        strides = [5, 2, 2, 2, 2]
 
         layers = []
         for i, curr_planes in enumerate(planes[:-1]):
-            layers.append(Basic1DEnc(curr_planes, planes[i+1], downsample=(True, 5, strides[i]),
-                                     final_bn_relu= (i == len(planes) - 2)))
+            layers.append(Basic1DEnc(curr_planes, planes[i + 1], downsample=(True, 5, strides[i]),
+                                     final_bn_relu=(i == len(planes) - 2)))
 
         self.enc_layers = nn.Sequential(*layers)
 
@@ -371,12 +370,11 @@ class Encoder2D(nn.Module):
         layers = []
 
         for i, l in enumerate(linears[:-1]):
-            layers.append(nn.Linear(l, linears[i+1]))
-            layers.append(nn.BatchNorm1d(linears[i+1]))
+            layers.append(nn.Linear(l, linears[i + 1]))
+            layers.append(nn.BatchNorm1d(linears[i + 1]))
             layers.append(nn.ReLU())
 
         self.linear_layers = nn.Sequential(*layers[:-2])
-
 
     def forward(self, x):
         x = self.enc_layers(x)
@@ -391,12 +389,12 @@ class Decoder2D(nn.Module):
     def __init__(self, z_dim=30):
         super().__init__()
         self.z_dim = z_dim
-        planes = [1,128,64,32,16,1]
-        up_strides = [2,2,4,2,2]
+        planes = [1, 128, 64, 32, 16, 1]
+        up_strides = [2, 2, 4, 2, 2]
 
         layers = []
         for i, curr_planes in enumerate(planes[:-1]):
-            layers.append(ResizeConv1d(curr_planes, planes[i+1], 7, up_strides[i]))
+            layers.append(ResizeConv1d(curr_planes, planes[i + 1], 7, up_strides[i]))
 
         self.dec_layers = nn.Sequential(*layers)
         self.final_linear = nn.Linear(1060, 500)
@@ -404,7 +402,7 @@ class Decoder2D(nn.Module):
         layers = []
         linear_layers = [z_dim, 64, 256, 500]
         for i, curr_planes in enumerate(linear_layers[:-1]):
-            layers.append(nn.Linear(curr_planes, linear_layers[i+1]))
+            layers.append(nn.Linear(curr_planes, linear_layers[i + 1]))
             layers.append(nn.BatchNorm1d(1))
             layers.append(nn.ReLU())
 
@@ -414,13 +412,13 @@ class Decoder2D(nn.Module):
         x = x.view(x.size(0), 1, -1)
         x1 = self.final_linear(self.dec_layers(x))
         x2 = self.linear_layers(x)
-        x = x1+x2
+        x = x1 + x2
         return x
 
 
 class DIRECT_VAE(pl.LightningModule):
 
-    def __init__(self, log_dict, z_dim=20, learning_rate = 0.02, loss_ratio = 1000):
+    def __init__(self, log_dict, z_dim=20, learning_rate=0.02, loss_ratio=1000):
         super().__init__()
         self.log_dict = log_dict
         self.encoder = Encoder2D(z_dim=z_dim)
@@ -472,7 +470,7 @@ class DIRECT_VAE(pl.LightningModule):
         kl_loss = torch.mean(self.kl_divergence(z, mean, std))
 
         return {'x_recon': x_recon, 'recon_loss': recon_loss_raw_mse, 'kl_loss': kl_loss,
-                'recon_loss_raw_mse' : recon_loss_raw_mse, 'recon_loss_raw_mae' : recon_loss_raw_mae}
+                'recon_loss_raw_mse': recon_loss_raw_mse, 'recon_loss_raw_mae': recon_loss_raw_mae}
 
     def training_step(self, batch, batch_idx, device, optimizer_idx=0):
         self.curr_device = device
@@ -504,14 +502,15 @@ class DIRECT_VAE(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
 
 
-MODEL_DICT = {'STFT' : STFT_VAE, 'DIRECT' : DIRECT_VAE}
+MODEL_DICT = {'STFT': STFT_VAE, 'DIRECT': DIRECT_VAE}
+
 
 class VAE(pl.LightningModule):
-    def __init__(self, mode = 'STFT', learning_rate = .02, z_dim = 20):
+    def __init__(self, mode='STFT', learning_rate=.02, z_dim=20):
         super().__init__()
         self.mode = mode
         self.learning_rate, self.z_dim = learning_rate, z_dim
-        self.model = MODEL_DICT[mode](learning_rate = learning_rate, z_dim = z_dim, log_dict = self.log_dict)
+        self.model = MODEL_DICT[mode](learning_rate=learning_rate, z_dim=z_dim, log_dict=self.log_dict)
         self.float()
 
     def forward(self, x):
@@ -521,7 +520,7 @@ class VAE(pl.LightningModule):
         curr_device = batch['fecg_sig'].device
         loss, d = self.model.training_step(batch, batch_idx, curr_device, optimizer_idx)
 
-        self.log_dict({k : v for k, v in d.items()}, sync_dist=True)
+        self.log_dict({k: v for k, v in d.items()}, sync_dist=True)
 
         return loss.float()
 
@@ -539,4 +538,3 @@ class VAE(pl.LightningModule):
 
     def configure_optimizers(self):
         return self.model.configure_optimizers()
-
