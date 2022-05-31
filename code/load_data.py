@@ -17,18 +17,18 @@ LOAD_INTO_MEMORY = False
 def normalize(batch, batch_extra):  # normalizes the signal
 
     scale_factor = np.repeat(np.ptp(batch, axis=-1, keepdims=True), batch.shape[-1], axis=-1)
-    shift = np.repeat(np.min(batch, axis=-1, keepdims=True), batch.shape[-1], axis=-1)
-    batch = (batch - shift) / scale_factor
-    batch_extra = (batch_extra - shift) / scale_factor
+    shift = -np.min(batch, axis=-1, keepdims=True)
+    batch = batch / scale_factor
+    batch_extra = batch_extra / scale_factor
 
-    return batch, batch_extra
+    return batch, batch_extra, shift
 
 
 def scale_signals(mecg_sig, fecg_sig):
     mecg, fecg = copy(mecg_sig), copy(fecg_sig)
     aecg = mecg + fecg
-    aecg, mecg = normalize(aecg, mecg)
-    return mecg, aecg - mecg
+    aecg, mecg, shift = normalize(aecg, mecg)
+    return mecg, aecg - mecg, shift
 
 
 def stft(sig: np.array):
@@ -136,10 +136,13 @@ class ECGDataset(Dataset):
         for key in keys_to_remove:
             inp.pop(key)
 
-        inp['mecg_sig'], inp['fecg_sig'] = scale_signals(inp['mecg_sig'], inp['fecg_sig'])
+        inp['mecg_sig'], inp['fecg_sig'], inp['shift'] = scale_signals(inp['mecg_sig'], inp['fecg_sig'])
 
-        inp['mecg_stft'] = stft(inp['mecg_sig'])
-        inp['fecg_stft'] = stft(inp['fecg_sig'])
+        shifted_mecg = inp['mecg_sig'] + inp['shift']
+        shifted_fecg = inp['fecg_sig'] + inp['shift']
+
+        inp['mecg_stft'] = stft(shifted_mecg)
+        inp['fecg_stft'] = stft(shifted_fecg)
 
         # assert inp['mecg_stft'].shape[0] == 2
 
