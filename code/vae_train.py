@@ -26,7 +26,7 @@ NUM_DATA_WORKERS = 8
 BATCH_SIZE = 128
 FIND_UNUSED = False
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
-NUM_EPOCHS = 25
+NUM_EPOCHS = 2000
 
 if __name__ == '__main__':
     model_log_path = os.path.join(LOG_DIR, MODEL_NAME)
@@ -64,7 +64,7 @@ if __name__ == '__main__':
                      # strategy=DDPPlugin(find_unused_parameters=FIND_UNUSED),
                      accelerator=DEVICE,
                      devices=NUM_TRAINER_WORKERS,
-                     max_epochs=NUM_EPOCHS * 8,
+                     max_epochs=NUM_EPOCHS,
                      auto_lr_find=True)
 
     print(f"======= Training {MODEL_NAME} =======")

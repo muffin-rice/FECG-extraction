@@ -17,8 +17,8 @@ LOAD_INTO_MEMORY = False
 def normalize(batch, batch_extra):  # normalizes the signal
 
     scale_factor = np.repeat(np.ptp(batch, axis=-1, keepdims=True), batch.shape[-1], axis=-1)
-    shift = -np.min(batch, axis=-1, keepdims=True)
     batch = batch / scale_factor
+    shift = -np.min(batch, axis=-1, keepdims=True)
     batch_extra = batch_extra / scale_factor
 
     return batch, batch_extra, shift
@@ -138,15 +138,14 @@ class ECGDataset(Dataset):
 
         inp['mecg_sig'], inp['fecg_sig'], inp['shift'] = scale_signals(inp['mecg_sig'], inp['fecg_sig'])
 
-        shifted_mecg = inp['mecg_sig'] + inp['shift']
-        shifted_fecg = inp['fecg_sig'] + inp['shift']
+        inp['mecg_sig'] += inp['shift']
 
-        inp['mecg_stft'] = stft(shifted_mecg)
-        inp['fecg_stft'] = stft(shifted_fecg)
+        inp['mecg_stft'] = stft(inp['mecg_sig'])
+        inp['fecg_stft'] = stft(inp['fecg_sig'])
 
         # assert inp['mecg_stft'].shape[0] == 2
 
-        if torch.isnan(inp['mecg_stft']).any() or torch.isnan(inp['mecg_stft']).any():
+        if torch.isnan(inp['fecg_stft']).any() or torch.isnan(inp['mecg_stft']).any():
             print(inp)
             raise SystemError
 
