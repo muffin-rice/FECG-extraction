@@ -144,7 +144,8 @@ class VAE(pl.LightningModule):
     def calc_mae(x_recon, x):
         return torch.mean(F.l1_loss(x_recon, x, reduction='sum'))
 
-    def kl_divergence(self, z, mu, std):
+    @staticmethod
+    def kl_divergence(z, mu, std):
         p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
         q = torch.distributions.Normal(mu, std)
 

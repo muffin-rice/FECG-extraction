@@ -8,7 +8,11 @@ from load_data import ECGDataModule
 from vae import VAE
 from vae_train import DATA_DIR, NUM_DATA_WORKERS, BATCH_SIZE, NUM_TRAINER_WORKERS
 
-model_path = '/Users/Richard/git/FECG-extraction/run/logging/modelv1.0/version_23/checkpoints/last.ckpt'
+run_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'run')
+model_name = 'modelv1.0'
+model_version = 'version_24'
+model_path = f'{run_root}/logging/{model_name}/{model_version}/checkpoints/last.ckpt'
+output_root = f'{run_root}/output/{model_name}/{model_version}'
 
 if __name__ == '__main__':
     model = VAE.load_from_checkpoint(model_path)
@@ -31,7 +35,7 @@ if __name__ == '__main__':
                        'mecg_sig': d['mecg_sig'][i].detach().cpu().numpy(),
                        'mecg_recon': model_output['x_recon'][i].detach().cpu().numpy()}
 
-                savemat(f'/Users/Richard/git/FECG-extraction/run/output/train/ecg_{index}.mat', out)
+                savemat(output_root + f'/train/ecg_{index}.mat', out)
                 index += 1
 
         print('train eval done\nstart validation eval')
@@ -46,7 +50,7 @@ if __name__ == '__main__':
                        'mecg_sig': d['mecg_sig'][i].detach().cpu().numpy(),
                        'mecg_recon': model_output['x_recon'][i].detach().cpu().numpy()}
 
-                savemat(f'/Users/Richard/git/FECG-extraction/run/output/validation/ecg_{index}.mat', out)
+                savemat(output_root + f'/validation/ecg_{index}.mat', out)
                 index += 1
 
         print('validation eval done\nstart test eval')
@@ -61,7 +65,7 @@ if __name__ == '__main__':
                        'mecg_sig': d['mecg_sig'][i].detach().cpu().numpy(),
                        'mecg_recon': model_output['x_recon'][i].detach().cpu().numpy()}
 
-                savemat(f'/Users/Richard/git/FECG-extraction/run/output/test/ecg_{index}.mat', out)
+                savemat(output_root + f'/test/ecg_{index}.mat', out)
                 index += 1
 
         print('all done')

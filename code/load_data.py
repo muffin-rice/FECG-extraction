@@ -23,11 +23,14 @@ def normalize(batch, batch_extra):  # normalizes the signal
 
     return batch, batch_extra, shift
 
+from denoising import wavelet_denoise, fir_filt
 
 def scale_signals(mecg_sig, fecg_sig):
     mecg, fecg = copy(mecg_sig), copy(fecg_sig)
+    fecg = fir_filt(fecg_sig)
     aecg = mecg + fecg
-    aecg, mecg, shift = normalize(aecg, mecg)
+    aecg, mecg, shift = normalize(aecg, aecg - fecg)
+
     return mecg, aecg - mecg, shift
 
 
