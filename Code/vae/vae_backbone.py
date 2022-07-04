@@ -11,15 +11,15 @@ import matplotlib.pyplot as plt
 
 class EncoderX(nn.Module):
 
-    def __init__(self, im_chan : int = START_CHANNELS, z_dim : int = Z_DIM, hidden_dim : (int) = NUM_PLANES, kernels : (int) = NUM_KERNELS,
+    def __init__(self, im_chan : int = START_CHANNELS, z_dim : int = Z_DIM, hidden_dim : (int,) = NUM_PLANES_DOWN, kernels : (int,) = NUM_KERNELS,
                  strides=NUM_STRIDES):
         super(EncoderX, self).__init__()
         self.z_dim = z_dim
         self.encode_x = nn.Sequential(
-            self.encoderX_block(im_chan, NUM_PLANES[0], kernel_size=kernels[0], stride=strides[0]),
-            self.encoderX_block(NUM_PLANES[0], NUM_PLANES[1], kernel_size=kernels[1], stride=strides[1]),
-            self.encoderX_block(NUM_PLANES[1], NUM_PLANES[2], kernel_size=kernels[2], stride=strides[2]),
-            self.encoderX_block(NUM_PLANES[2], z_dim * 2, kernel_size=kernels[3], stride=strides[3], final_layer=True),
+            self.encoderX_block(im_chan, hidden_dim[0], kernel_size=kernels[0], stride=strides[0]),
+            self.encoderX_block(hidden_dim[0], hidden_dim[1], kernel_size=kernels[1], stride=strides[1]),
+            self.encoderX_block(hidden_dim[1], hidden_dim[2], kernel_size=kernels[2], stride=strides[2]),
+            self.encoderX_block(hidden_dim[2], z_dim * 2, kernel_size=kernels[3], stride=strides[3], final_layer=True),
         )
 
     def encoderX_block(self, input_channels : int, output_channels : int, kernel_size : int = 4, stride : int = 2, final_layer : bool = False):
@@ -85,7 +85,7 @@ def invert_stft_batch(stft_sig : torch.Tensor): #batch_size x 34 x 469
 
 class DecoderX(nn.Module):
 
-    def __init__(self, im_chan=START_CHANNELS, z_dim=Z_DIM, hidden_dim=NUM_PLANES, kernels=DECODER_KERNELS,
+    def __init__(self, im_chan=START_CHANNELS, z_dim=Z_DIM, hidden_dim=NUM_PLANES_UP, kernels=DECODER_KERNELS,
                  strides=DECODER_STRIDES, recon_length=500):
         super(DecoderX, self).__init__()
         self.z_dim, self.recon_length = z_dim, recon_length
@@ -97,11 +97,11 @@ class DecoderX(nn.Module):
         #         )
 
         self.gen = nn.Sequential(
-            self.decoderX_block(z_dim, NUM_PLANES[-1], kernel_size=kernels[0], stride=strides[0]),
-            self.decoderX_block(NUM_PLANES[-1], NUM_PLANES[-2], kernel_size=kernels[1], stride=strides[1]),
-            self.decoderX_block(NUM_PLANES[-2], NUM_PLANES[-3], output_padding=0, kernel_size=kernels[2],
+            self.decoderX_block(z_dim, hidden_dim[-1], kernel_size=kernels[0], stride=strides[0]),
+            self.decoderX_block(hidden_dim[-1], hidden_dim[-2], kernel_size=kernels[1], stride=strides[1]),
+            self.decoderX_block(hidden_dim[-2], hidden_dim[-3], output_padding=0, kernel_size=kernels[2],
                                      stride=strides[2]),
-            self.decoderX_block(NUM_PLANES[-3], im_chan, kernel_size=kernels[3], stride=strides[3],
+            self.decoderX_block(hidden_dim[-3], im_chan, kernel_size=kernels[3], stride=strides[3],
                                      final_layer=True),
         )
 
@@ -129,7 +129,7 @@ class DecoderX(nn.Module):
 def log_cosh_loss(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
     def _log_cosh(x: torch.Tensor) -> torch.Tensor:
         return x + F.softplus(-2. * x) - math.log(2.0)
-    return torch.sum(_log_cosh(y_pred - y_true))
+    return _log_cosh(y_pred - y_true)
 
 # class MaskedDiff(torch.nn.Module):
 #     def __init__(self):
@@ -152,7 +152,7 @@ def log_cosh_loss(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
 #         return loss_masked
 
 class VAE(pl.LightningModule):
-    def __init__(self, sample_ecg, loss_ratio=LOSS_RATIO, learning_rate=LEARNING_RATE):
+    def __init__(self, sample_ecg, reconstruct_sig : str = 'fecg', loss_ratio=LOSS_RATIO, learning_rate=LEARNING_RATE):
         super().__init__()
         self.encoderX = EncoderX()
         self.decoderX = DecoderX()
@@ -161,6 +161,7 @@ class VAE(pl.LightningModule):
         self.double()
         self.curr_device = None
         self.sample_ecg = sample_ecg
+        self.target_sig = reconstruct_sig
 
     def vae_stft(self, sig: torch.Tensor):
         if len(sig.shape) == 3:
@@ -181,7 +182,8 @@ class VAE(pl.LightningModule):
 
     def loss_function(self, results):
         # return PEAK_MASK_LOSS_FACTOR * torch.sum(results['loss_mse'] * results['peak_mask'])
-        return 10 * results['loss_log_cosh'] + PEAK_MASK_LOSS_FACTOR * torch.sum(results['loss_mse'] * results['peak_mask']) / BATCH_SIZE
+        return 10 * torch.sum(results['loss_log_cosh']) + PEAK_MASK_LOSS_FACTOR * \
+               torch.sum(results['loss_mse'] * (results['maternal_mask'])) / BATCH_SIZE
 
     def loss_function_ss(self, results, alpha):
         return self.loss_function(results) + alpha * ()
@@ -215,8 +217,9 @@ class VAE(pl.LightningModule):
         fecg_sig, fecg_stft = x['fecg_sig'][:, :1, :], x['fecg_stft'][:, :1, :, :]
         mecg_sig, mecg_stft = x['mecg_sig'][:, :1, :], x['mecg_stft'][:, :1, :, :]
         offset = x['offset'][:, :1, :]
-        peak_mask = x['fetal_mask'][:, :1, :]
+        fetal_mask, maternal_mask = x['fetal_mask'][:, :1, :], x['maternal_mask'][:, :1, :]
         aecg_sig, aecg_stft = fecg_sig + mecg_sig - offset, fecg_stft + mecg_stft
+        target_sig, target_stft = x[f'{self.target_sig}_sig'], x[f'{self.target_sig}_stft']
 
         mean, std = self.encoderX(aecg_sig)
         z = Normal(mean, std)
@@ -224,23 +227,30 @@ class VAE(pl.LightningModule):
         z_sample = z.rsample()  # Equivalent to torch.randn(z_dim) * stddev + mean
         x_recon = self.decoderX(z_sample)
 
-        recon_loss_mse = self.calc_mse(self.vae_stft(x_recon), fecg_stft)
-        recon_loss_mae = self.calc_mae(self.vae_stft(x_recon), fecg_stft)
-        recon_loss_raw_mse = self.calc_mse(x_recon, fecg_sig - offset)
-        recon_loss_raw_mae = self.calc_mae(x_recon, fecg_sig - offset)
-        recon_log_cosh = self.calc_logcosh(x_recon, fecg_sig - offset)
+        recon_loss_mse = self.calc_mse(self.vae_stft(x_recon), target_stft)
+        recon_loss_mae = self.calc_mae(self.vae_stft(x_recon), target_stft)
+        recon_loss_raw_mse = self.calc_mse(x_recon, target_sig - offset)
+        recon_loss_raw_mae = self.calc_mae(x_recon, target_sig - offset)
+        recon_log_cosh = self.calc_logcosh(x_recon, target_sig - offset)
 
         kl_loss = torch.mean(self.kl_divergence(z_sample, mean, std))
 
-        return {'x_recon': x_recon, 'stft_loss_mse': torch.sum(recon_loss_mse), 'loss_log_cosh': recon_log_cosh,
-                'kl_loss': kl_loss, 'stft_loss_mae': torch.sum(recon_loss_mae), 'loss_mse': torch.sum(recon_loss_raw_mse),
-                'loss_mae': torch.sum(recon_loss_raw_mae), 'orig_fecg': fecg_sig, 'orig_mecg': mecg_sig,
-                'peak_mask' : peak_mask, 'mu' : mean, 'sigma' : std}
+        aggregate_loss = {'stft_loss_mse': recon_loss_mse, 'loss_log_cosh': recon_log_cosh,
+                          'stft_loss_mae': recon_loss_mae, 'loss_mse': recon_loss_raw_mse,
+                          'loss_mae': recon_loss_raw_mae,}
+
+        return_dict = {'x_recon': x_recon, 'kl_loss': kl_loss, 'orig_fecg': fecg_sig, 'orig_mecg': mecg_sig,
+                'fetal_mask' : fetal_mask, 'maternal_mask' : maternal_mask, 'mu' : mean, 'sigma' : std}
+
+        return_dict['loss'] = self.loss_function({**aggregate_loss, **return_dict})
+
+        aggregate_loss = {k : torch.sum(loss) for k, loss in aggregate_loss.items()}
+        return_dict.update(aggregate_loss)
+
+        return return_dict
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         d = self(batch)
-
-        d['loss'] = self.loss_function(d)
 
         self.log_dict({f'train_{k}': v for k, v in d.items() if 'loss' in k}, sync_dist=True)
 
@@ -255,29 +265,53 @@ class VAE(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx, optimizer_idx=0):
         d = self(batch)
-        d['loss'] = self.loss_function(d)
 
         self.log_dict({f'val_{k}': v for k, v in d.items()}, sync_dist=True)
 
     def test_step(self, batch, batch_idx, optimizer_idx=0):
         curr_device = batch['fecg_sig'].device
         d = self(batch)
-        d['loss'] = self.loss_function(d)
 
         self.log_dict({f'test_{k}': v for k, v in d.items()}, sync_dist=True)
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer
-
-    def training_epoch_end(self, training_step_outputs):
-        results = self(self.sample_ecg)
-        recon = results['x_recon'].detach().numpy()
-        orig_sig = self.sample_ecg['fecg_sig']  # self.sample_ecg['fecg_sig']
-
-        plt.plot(orig_sig[0, 0, :], color='b')
-        plt.plot(recon[0, 0, :], color='r')
-
-        plt.show()
-
-        super().training_epoch_end(training_step_outputs)
+    #
+    # def training_epoch_end(self, training_step_outputs):
+    #     results = self(self.sample_ecg)
+    #     recon = results['x_recon'].detach().numpy()
+    #     orig_sig = self.sample_ecg['fecg_sig']  # self.sample_ecg['fecg_sig']
+    #
+    #     plt.plot(orig_sig[0, 0, :], color='b')
+    #     plt.plot(recon[0, 0, :], color='r')
+    #
+    #     plt.show()
+    #
+    #     super().training_epoch_end(training_step_outputs)
+#
+# class CASCADE_VAE(pl.LightningModule):
+#
+#     def __init__(self, sample_ecg, loss_ratio=LOSS_RATIO, learning_rate=LEARNING_RATE):
+#         super().__init__()
+#         self.mecg_detector = VAE(sample_ecg, 'mecg', loss_ratio, learning_rate)
+#         self.fecg_detector = VAE(sample_ecg, 'fecg', loss_ratio, learning_rate)
+#         self.double()
+#         self.curr_device = None
+#
+#     def training_step(self, batch, batch_idx, optimizer_idx=0):
+#         opt_mecg, opt_fecg = self.optimizers()
+#
+#         # train mecg
+#
+#         results_mecg = self.mecg_detector(batch)
+#         opt_mecg.zero_grad()
+#         self.mecg_detector.manual_backward(self.mecg_detector.loss_function(results_mecg))
+#         opt_mecg.step()
+#
+#         # train fecg
+#
+#
+#
+#     def configure_optimizers(self):
+#         return self.mecg_detector.configure_optimizers(), self.fecg_detector.configure_optimizers()

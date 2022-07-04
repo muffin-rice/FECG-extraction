@@ -104,6 +104,10 @@ class ECGDataset(Dataset):
 
         inp['mecg_sig'], inp['fecg_sig'], inp['offset'] = scale_signals(inp['mecg_sig'], inp['fecg_sig'])
         inp['fetal_mask'] = calc_multi_channel_peak_mask(inp['fecg_sig'])
+        inp['maternal_mask'] = calc_multi_channel_peak_mask(inp['mecg_sig'])
+
+        assert inp['fetal_mask'].shape == inp['maternal_mask'].shape
+
         inp['mecg_stft'], inp['fecg_stft'] = stft_batch(inp['mecg_sig']), stft_batch(inp['fecg_sig'])
 
         # assert inp['mecg_stft'].shape[0] == 2
