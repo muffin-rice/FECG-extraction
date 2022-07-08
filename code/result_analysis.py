@@ -45,6 +45,7 @@ model_path = f'{run_root}/logging/{model_name}/{model_version}/checkpoints/last.
 output_root = f'{run_root}/output/{model_name}/{model_version}'
 
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
     model = VAE.load_from_checkpoint(model_path)
     model.eval()
 
@@ -64,11 +65,16 @@ if __name__ == '__main__':
             model_output = model(d)
 
             for i in range(d['fecg_sig'].shape[0]):
-                p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
-                psum += p
-                rsum += r
-                fsum += f
-                count += 1
+                if d['snr'][i].detach().cpu().numpy() > 168:
+                    p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
+                    # plt.plot(d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy())
+                    # plt.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
+                    # plt.show()
+                    # exit()
+                    psum += p
+                    rsum += r
+                    fsum += f
+                    count += 1
 
         print('precision', psum / count, 'recall', rsum / count, 'f1', fsum / count)
 
@@ -83,14 +89,15 @@ if __name__ == '__main__':
             model_output = model(d)
 
             for i in range(d['fecg_sig'].shape[0]):
-                p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(),
-                                             d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][
-                                                 0].detach().cpu().numpy() - model_output['x_recon'][i][
-                                                 0].detach().cpu().numpy(), detector)
-                psum += p
-                rsum += r
-                fsum += f
-                count += 1
+                if d['snr'][i].detach().cpu().numpy() > 168:
+                    p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(),
+                                                 d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][
+                                                     0].detach().cpu().numpy() - model_output['x_recon'][i][
+                                                     0].detach().cpu().numpy(), detector)
+                    psum += p
+                    rsum += r
+                    fsum += f
+                    count += 1
 
         print('precision', psum / count, 'recall', rsum / count, 'f1', fsum / count)
 
@@ -105,13 +112,14 @@ if __name__ == '__main__':
             model_output = model(d)
 
             for i in range(d['fecg_sig'].shape[0]):
-                p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(),
-                                             d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][
-                                                 0].detach().cpu().numpy() - model_output['x_recon'][i][
-                                                 0].detach().cpu().numpy(), detector)
-                psum += p
-                rsum += r
-                fsum += f
-                count += 1
+                if d['snr'][i].detach().cpu().numpy() > 168:
+                    p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(),
+                                                 d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][
+                                                     0].detach().cpu().numpy() - model_output['x_recon'][i][
+                                                     0].detach().cpu().numpy(), detector)
+                    psum += p
+                    rsum += r
+                    fsum += f
+                    count += 1
 
         print('precision', psum / count, 'recall', rsum / count, 'f1', fsum / count)

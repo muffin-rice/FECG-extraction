@@ -9,7 +9,6 @@ import torch
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 
-
 DROP_LAST = False
 LOAD_INTO_MEMORY = False
 
@@ -23,15 +22,26 @@ def normalize(batch, batch_extra):  # normalizes the signal
 
     return batch, batch_extra, shift
 
+
+def rssq(signal):
+    return np.sqrt(np.sum(np.square(signal)))
+
+
+def calc_snr(original, filtered):
+    sig_pow = rssq(filtered)
+    noise_pow = rssq(original - filtered)
+    return 10 * np.log10(sig_pow / noise_pow)
+
 from denoising import wavelet_denoise, fir_filt
 
 def scale_signals(mecg_sig, fecg_sig):
     mecg, fecg = copy(mecg_sig), copy(fecg_sig)
     fecg = fir_filt(fecg_sig)
     aecg = mecg + fecg
+    aecg_snr = calc_snr(aecg, fir_filt(aecg) + fecg_sig - fecg)
     aecg, mecg, shift = normalize(aecg, aecg - fecg)
 
-    return mecg, aecg - mecg, shift
+    return mecg, aecg - mecg, shift, aecg_snr
 
 
 def stft(sig: np.array):
@@ -139,7 +149,7 @@ class ECGDataset(Dataset):
         for key in keys_to_remove:
             inp.pop(key)
 
-        inp['mecg_sig'], inp['fecg_sig'], inp['shift'] = scale_signals(inp['mecg_sig'], inp['fecg_sig'])
+        inp['mecg_sig'], inp['fecg_sig'], inp['shift'], inp['snr'] = scale_signals(inp['mecg_sig'], inp['fecg_sig'])
 
         inp['mecg_sig'] += inp['shift']
 

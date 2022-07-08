@@ -22,6 +22,8 @@ DECODER_KERNELS = (7,8,8,6)
 DECODER_STRIDES = (4,4,4,4)
 NUM_PLANES = (16, 64, 128)
 
+SKIP = False
+
 assert len(NUM_PLANES) == len(NUM_BLOCKS)
 START_CHANNELS = 34
 
@@ -42,9 +44,11 @@ def make_encoderX_block(input_channels, output_channels, kernel_size=4, stride=2
 
 class EncoderX(nn.Module):
 
-    def __init__(self, im_chan=1, z_dim=Z_DIM, hidden_dim=NUM_PLANES, kernels=NUM_KERNELS, strides=NUM_STRIDES):
+    def __init__(self, im_chan=1, z_dim=Z_DIM, hidden_dim=NUM_PLANES, kernels=NUM_KERNELS, strides=NUM_STRIDES, skip=SKIP):
         super(EncoderX, self).__init__()
         self.z_dim = z_dim
+        self.skip = skip
+        self.skip_out = [0, 0]
         self.encode_x = nn.Sequential(
             make_encoderX_block(im_chan, NUM_PLANES[0], kernel_size=kernels[0], stride=strides[0]),
             make_encoderX_block(NUM_PLANES[0], NUM_PLANES[1], kernel_size=kernels[1], stride=strides[1]),
@@ -53,7 +57,10 @@ class EncoderX(nn.Module):
         )
 
     def forward(self, signal):
-        encoding_x = self.encode_x(signal)
+        for i, layer in enumerate(self.encode_x):
+            encoding_x = layer(encoding_x if i else signal)
+            if self.skip and i > 0 and i < len(self.encode_x) - 1:
+                self.skip_out[i-1] = encoding_x
         encoding_x = encoding_x.view(len(encoding_x), -1)
 
         # The stddev output is treated as the log of the variance of the normal
@@ -64,8 +71,10 @@ class EncoderX(nn.Module):
 class DecoderX(nn.Module):
 
     def __init__(self, im_chan=1, z_dim=Z_DIM, hidden_dim=NUM_PLANES, kernels=DECODER_KERNELS, strides=DECODER_STRIDES,
-                 recon_length=500):
+                 recon_length=500, skip=SKIP):
         super(DecoderX, self).__init__()
+        self.skip = skip
+        self.skip_in = [0, 0]
         self.z_dim, self.recon_length = z_dim, recon_length
         #         self.gen = nn.Sequential(
         #             self.make_decoderX_block(z_dim, NUM_PLANES[-1], kernel_size=kernels[-1], stride=strides[-1]),
@@ -101,7 +110,12 @@ class DecoderX(nn.Module):
     def forward(self, noise):
 
         x = torch.unsqueeze(noise, 2)
-        x = self.gen(x)
+        for i, layer in enumerate(self.gen):
+            if self.skip and i > 0 and i < len(self.gen) - 1:
+                x = layer(x + self.skip_in[2 - i])
+            else:
+                x = layer(x)
+
         return x[:, :, :self.recon_length]
 
 
@@ -134,7 +148,7 @@ class VAE(pl.LightningModule):
             return torch.cat((stft_image.real, stft_image.imag), dim=1)
 
     def loss_function(self, results):
-        return results['loss_mse']
+        return results['loss_mse'] + results['kl_loss'] * 0.1
 
     @staticmethod
     def calc_mse(x_recon, x):
@@ -162,11 +176,12 @@ class VAE(pl.LightningModule):
         fecg_sig, fecg_stft = x['fecg_sig'][:, :1, :], x['fecg_stft'][:, :1, :, :]
         mecg_sig, mecg_stft = x['mecg_sig'][:, :1, :], x['mecg_stft'][:, :1, :, :]
         aecg_sig, aecg_stft = fecg_sig + mecg_sig, fecg_stft + mecg_stft
-
-        mean, std = self.encoderX(aecg_sig)
+        # mean, std = self.encoderX(F.pad(aecg_sig, (30, 30)))
+        mean, std = self.encoderX(F.pad(aecg_sig, (0, 0)))
         z = Normal(mean, std)
 
         z_sample = z.rsample()  # Equivalent to torch.randn(z_dim) * stddev + mean
+        self.decoderX.skip_in = self.encoderX.skip_out
         x_recon = self.decoderX(z_sample)
 
         recon_loss_mse = self.calc_mse(self.stft(x_recon), mecg_stft)
