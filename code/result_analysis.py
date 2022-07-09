@@ -1,9 +1,14 @@
 import os
 
+import numpy as np
 import torch
 from ecgdetectors import Detectors
 detectors = Detectors(125)
 detector = detectors.hamilton_detector
+
+peak_detectors = [detectors.hamilton_detector, detectors.christov_detector, detectors.engzee_detector, detectors.pan_tompkins_detector, detectors.swt_detector, detectors.two_average_detector]
+
+
 
 from vae import VAE
 from load_data import ECGDataModule
@@ -39,24 +44,23 @@ def count_peak_matches(orig_signal, pred_signal, detector):
 
 
 run_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'run')
-model_name = 'modelv1.0'
-model_version = 'version_23'
+model_name = 'modelv1.1'
+model_version = 'version_12'
 model_path = f'{run_root}/logging/{model_name}/{model_version}/checkpoints/last.ckpt'
 output_root = f'{run_root}/output/{model_name}/{model_version}'
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     model = VAE.load_from_checkpoint(model_path)
-    model.eval()
 
     dm = ECGDataModule(data_dir=DATA_DIR, window_size=500, dataset_type='', num_workers=1,
                        batch_size=max(2, int(BATCH_SIZE / NUM_TRAINER_WORKERS)))
 
     model.eval()
     with torch.no_grad():
-        psum = 0
-        rsum = 0
-        fsum = 0
+        psum = np.zeros(len(peak_detectors))
+        rsum = np.zeros(len(peak_detectors))
+        fsum = np.zeros(len(peak_detectors))
         count = 0
 
         print('training scores:')
@@ -66,15 +70,16 @@ if __name__ == '__main__':
 
             for i in range(d['fecg_sig'].shape[0]):
                 if d['snr'][i].detach().cpu().numpy() > 168:
-                    p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
-                    # plt.plot(d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy())
-                    # plt.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
-                    # plt.show()
-                    # exit()
-                    psum += p
-                    rsum += r
-                    fsum += f
-                    count += 1
+                    for j in range(len(peak_detectors)):
+                        p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
+                        # plt.plot(d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy())
+                        # plt.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
+                        # plt.show()
+                        # exit()
+                        psum[j] += p
+                        rsum[j] += r
+                        fsum[j] += f
+                        count += 1
 
         print('precision', psum / count, 'recall', rsum / count, 'f1', fsum / count)
 
@@ -90,14 +95,17 @@ if __name__ == '__main__':
 
             for i in range(d['fecg_sig'].shape[0]):
                 if d['snr'][i].detach().cpu().numpy() > 168:
-                    p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(),
-                                                 d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][
-                                                     0].detach().cpu().numpy() - model_output['x_recon'][i][
-                                                     0].detach().cpu().numpy(), detector)
-                    psum += p
-                    rsum += r
-                    fsum += f
-                    count += 1
+                    for j in range(len(peak_detectors)):
+                        p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(),
+                                                     model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
+                        # plt.plot(d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy())
+                        # plt.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
+                        # plt.show()
+                        # exit()
+                        psum[j] += p
+                        rsum[j] += r
+                        fsum[j] += f
+                        count += 1
 
         print('precision', psum / count, 'recall', rsum / count, 'f1', fsum / count)
 
@@ -113,13 +121,15 @@ if __name__ == '__main__':
 
             for i in range(d['fecg_sig'].shape[0]):
                 if d['snr'][i].detach().cpu().numpy() > 168:
-                    p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(),
-                                                 d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][
-                                                     0].detach().cpu().numpy() - model_output['x_recon'][i][
-                                                     0].detach().cpu().numpy(), detector)
-                    psum += p
-                    rsum += r
-                    fsum += f
-                    count += 1
+                    for j in range(len(peak_detectors)):
+                        p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
+                        # plt.plot(d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy())
+                        # plt.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
+                        # plt.show()
+                        # exit()
+                        psum[j] += p
+                        rsum[j] += r
+                        fsum[j] += f
+                        count += 1
 
         print('precision', psum / count, 'recall', rsum / count, 'f1', fsum / count)

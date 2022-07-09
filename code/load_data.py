@@ -9,9 +9,13 @@ import torch
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 
+from utils import return_peaks, gauss_kernel
+
 DROP_LAST = False
 LOAD_INTO_MEMORY = False
 
+PEAK_WINDOW = 5
+PEAK_SIGMA = 1
 
 def normalize(batch, batch_extra):  # normalizes the signal
 
@@ -21,6 +25,25 @@ def normalize(batch, batch_extra):  # normalizes the signal
     batch_extra = batch_extra / scale_factor
 
     return batch, batch_extra, shift
+
+
+def calc_peak_mask(sig : np.array, peak_window = PEAK_WINDOW, peak_sigma = PEAK_SIGMA):
+    # signal should be single channel; 1 x sig_legnth
+    peaks = return_peaks(sig[:])
+    peak_mask = np.zeros(sig.shape)
+
+    for peak in peaks:
+        peak_mask[peak-int(peak_window/2) : peak+int(peak_window/2)+1] = gauss_kernel(peak_window, peak_sigma)
+
+    return peak_mask
+
+
+def calc_multi_channel_peak_mask(sig : np.ndarray, peak_window = PEAK_WINDOW, peak_sigma = PEAK_SIGMA):
+    mask = np.zeros(sig.shape)
+    for channel in range(sig.shape[0]):
+        mask[channel, :] = calc_peak_mask(sig[channel, :], peak_window, peak_sigma)
+
+    return mask
 
 
 def rssq(signal):
@@ -150,6 +173,8 @@ class ECGDataset(Dataset):
             inp.pop(key)
 
         inp['mecg_sig'], inp['fecg_sig'], inp['shift'], inp['snr'] = scale_signals(inp['mecg_sig'], inp['fecg_sig'])
+        inp['maternal_mask'] = calc_multi_channel_peak_mask(inp['mecg_sig'])
+        inp['fetal_mask'] = calc_multi_channel_peak_mask(inp['fecg_sig'])
 
         inp['mecg_sig'] += inp['shift']
 

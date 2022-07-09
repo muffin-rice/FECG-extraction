@@ -1,3 +1,5 @@
+import math
+
 import matplotlib.pyplot as plt
 
 import torch
@@ -16,16 +18,22 @@ Z_DIM = 64
 LOSS_RATIO = 1000
 
 NUM_BLOCKS = (8,8,8)
-NUM_STRIDES = (4,6,4,2)
-NUM_KERNELS = (8,8,8,4)
-DECODER_KERNELS = (7,8,8,6)
+NUM_STRIDES = (4,4,4,4)
+NUM_KERNELS = (8,8,10,6)
+DECODER_KERNELS = (6,10,8,8)
 DECODER_STRIDES = (4,4,4,4)
 NUM_PLANES = (16, 64, 128)
 
-SKIP = False
+SKIP = True
 
 assert len(NUM_PLANES) == len(NUM_BLOCKS)
 START_CHANNELS = 34
+
+
+def log_cosh_loss(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
+    def _log_cosh(x: torch.Tensor) -> torch.Tensor:
+        return x + F.softplus(-2. * x) - math.log(2.0)
+    return _log_cosh(y_pred - y_true)
 
 
 def make_encoderX_block(input_channels, output_channels, kernel_size=4, stride=2, final_layer=False):
@@ -151,12 +159,16 @@ class VAE(pl.LightningModule):
         return results['loss_mse'] + results['kl_loss'] * 0.1
 
     @staticmethod
-    def calc_mse(x_recon, x):
-        return torch.mean(F.mse_loss(x_recon, x, reduction='sum'))
+    def calc_mse(x_recon, x, mask=1):
+        return torch.mean(F.mse_loss(x_recon, x, reduction='sum') * mask)
 
     @staticmethod
     def calc_mae(x_recon, x):
         return torch.mean(F.l1_loss(x_recon, x, reduction='sum'))
+
+    @staticmethod
+    def calc_logcosh(x_recon, x):
+        return log_cosh_loss(x_recon, x)
 
     @staticmethod
     def kl_divergence(z, mu, std):
@@ -173,6 +185,8 @@ class VAE(pl.LightningModule):
 
     def forward(self, x):
 
+        maternal_mask = x['maternal_mask'][:, :1, :]
+        fetal_mask = x['fetal_mask'][:, :1, :]
         fecg_sig, fecg_stft = x['fecg_sig'][:, :1, :], x['fecg_stft'][:, :1, :, :]
         mecg_sig, mecg_stft = x['mecg_sig'][:, :1, :], x['mecg_stft'][:, :1, :, :]
         aecg_sig, aecg_stft = fecg_sig + mecg_sig, fecg_stft + mecg_stft
@@ -184,15 +198,15 @@ class VAE(pl.LightningModule):
         self.decoderX.skip_in = self.encoderX.skip_out
         x_recon = self.decoderX(z_sample)
 
-        recon_loss_mse = self.calc_mse(self.stft(x_recon), mecg_stft)
-        recon_loss_mae = self.calc_mae(self.stft(x_recon), mecg_stft)
-        recon_loss_raw_mse = self.calc_mse(x_recon, mecg_sig)
-        recon_loss_raw_mae = self.calc_mae(x_recon, mecg_sig)
+        recon_loss_mse = self.calc_mse(self.stft(x_recon), fecg_stft)
+        recon_loss_mae = self.calc_mae(self.stft(x_recon), fecg_stft)
+        recon_loss_raw_mse = self.calc_mse(x_recon, fecg_sig, fetal_mask + 1)
+        recon_loss_raw_mae = self.calc_mae(x_recon, fecg_sig)
         kl_loss = torch.mean(self.kl_divergence(z_sample, mean, std))
 
         return {'x_recon': x_recon, 'stft_loss_mse': recon_loss_mse,
                 'kl_loss': kl_loss, 'stft_loss_mae': recon_loss_mae, 'loss_mse': recon_loss_raw_mse,
-                'loss_mae': recon_loss_raw_mae}
+                'loss_mae': recon_loss_raw_mae, 'maternal_mask': maternal_mask, 'fetal_mask': fetal_mask}
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         d = self(batch)
