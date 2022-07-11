@@ -15,7 +15,7 @@ from vae import VAE
 
 SEED = 1
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'run', 'logging')
-MODEL_NAME = 'modelv1.2'
+MODEL_NAME = 'modelv2.1'
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'processed')
 LOG_STEPS = 10
 LEARNING_RATE = 1e-4

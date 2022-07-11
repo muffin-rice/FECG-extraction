@@ -24,7 +24,7 @@ DECODER_KERNELS = (6,10,8,8)
 DECODER_STRIDES = (4,4,4,4)
 NUM_PLANES = (16, 64, 128)
 
-SKIP = True
+SKIP = False
 
 assert len(NUM_PLANES) == len(NUM_BLOCKS)
 START_CHANNELS = 34
@@ -156,7 +156,7 @@ class VAE(pl.LightningModule):
             return torch.cat((stft_image.real, stft_image.imag), dim=1)
 
     def loss_function(self, results):
-        return results['loss_mse'] + results['kl_loss'] * 0.1
+        return results['loss_mse'] * 500 + results['kl_loss'] * 50
 
     @staticmethod
     def calc_mse(x_recon, x, mask=1):
@@ -168,7 +168,7 @@ class VAE(pl.LightningModule):
 
     @staticmethod
     def calc_logcosh(x_recon, x):
-        return log_cosh_loss(x_recon, x)
+        return torch.mean(log_cosh_loss(x_recon, x))
 
     @staticmethod
     def kl_divergence(z, mu, std):
@@ -200,7 +200,8 @@ class VAE(pl.LightningModule):
 
         recon_loss_mse = self.calc_mse(self.stft(x_recon), fecg_stft)
         recon_loss_mae = self.calc_mae(self.stft(x_recon), fecg_stft)
-        recon_loss_raw_mse = self.calc_mse(x_recon, fecg_sig, fetal_mask + 1)
+        # recon_loss_raw_mse = self.calc_mse(x_recon, fecg_sig, fetal_mask + 1)
+        recon_loss_raw_mse = self.calc_logcosh(x_recon, aecg_sig)
         recon_loss_raw_mae = self.calc_mae(x_recon, fecg_sig)
         kl_loss = torch.mean(self.kl_divergence(z_sample, mean, std))
 

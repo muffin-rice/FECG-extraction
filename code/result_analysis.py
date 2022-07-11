@@ -44,8 +44,8 @@ def count_peak_matches(orig_signal, pred_signal, detector):
 
 
 run_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'run')
-model_name = 'modelv1.1'
-model_version = 'version_12'
+model_name = 'modelv1.2'
+model_version = 'version_0'
 model_path = f'{run_root}/logging/{model_name}/{model_version}/checkpoints/last.ckpt'
 output_root = f'{run_root}/output/{model_name}/{model_version}'
 
@@ -69,7 +69,7 @@ if __name__ == '__main__':
             model_output = model(d)
 
             for i in range(d['fecg_sig'].shape[0]):
-                if d['snr'][i].detach().cpu().numpy() > 168:
+                if d['snr'][i].detach().cpu().numpy() > 166:
                     for j in range(len(peak_detectors)):
                         p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
                         # plt.plot(d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy())
@@ -84,9 +84,9 @@ if __name__ == '__main__':
         print('precision', psum / count, 'recall', rsum / count, 'f1', fsum / count)
 
         print('testing scores:')
-        psum = 0
-        rsum = 0
-        fsum = 0
+        psum = np.zeros(len(peak_detectors))
+        rsum = np.zeros(len(peak_detectors))
+        fsum = np.zeros(len(peak_detectors))
         count = 0
 
         dl = dm.test_dataloader()
@@ -94,7 +94,7 @@ if __name__ == '__main__':
             model_output = model(d)
 
             for i in range(d['fecg_sig'].shape[0]):
-                if d['snr'][i].detach().cpu().numpy() > 168:
+                if d['snr'][i].detach().cpu().numpy() > 166:
                     for j in range(len(peak_detectors)):
                         p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(),
                                                      model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
@@ -110,9 +110,9 @@ if __name__ == '__main__':
         print('precision', psum / count, 'recall', rsum / count, 'f1', fsum / count)
 
         print('validation scores:')
-        psum = 0
-        rsum = 0
-        fsum = 0
+        psum = np.zeros(len(peak_detectors))
+        rsum = np.zeros(len(peak_detectors))
+        fsum = np.zeros(len(peak_detectors))
         count = 0
 
         dl = dm.val_dataloader()
@@ -120,7 +120,7 @@ if __name__ == '__main__':
             model_output = model(d)
 
             for i in range(d['fecg_sig'].shape[0]):
-                if d['snr'][i].detach().cpu().numpy() > 168:
+                if d['snr'][i].detach().cpu().numpy() > 166:
                     for j in range(len(peak_detectors)):
                         p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
                         # plt.plot(d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy())
