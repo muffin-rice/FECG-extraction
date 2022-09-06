@@ -39,30 +39,19 @@ def thresholding(dcmp, n):
     return thresh
 
 
-def wavelet_denoise(window, thresh_sum, thresh_cnt,
-                    enable_th, wavelet='coif5', lvl=5):
-    """
-    Perform wavelet denoising on window segment
-    and return new window
-    window     : 3 sec segment ~ array float
-    thresh_sum : Sum of thresholds from prev. windows ~ float
-    thresh_cnt : # of thresholds ~ int
-    enable_th  : Disclude outliers from thresh calculation ~ T/F
-    wavelet    : Wavelet being used ~ string
-    lvl        : level of decomp - int
-    """
+def wav_filt(window, thresh_sum=0, thresh_cnt=0, enable_th=True, fs=1000, wavelet='coif5', lvl=4, winlen=41,
+             polyorder=4):
+    s_window = savgol_filter(window, winlen, polyorder)
 
-    window = savgol_filter(window, 31, 9)
-
-    original_length = len(window)
-    window = wavelet_padding(window)
+    original_length = len(s_window)
+    window = wavelet_padding(s_window)
 
     great_wave = pywt.swt(window, wavelet, level=lvl)
     great_wave = np.array(great_wave)
 
     thv = 0
 
-    if enable_th == True:
+    if enable_th:
         thv = thresholding(great_wave[0, 1, :], len(
             window))  # Universal Threshold
         thresh_cnt += 1
@@ -78,8 +67,7 @@ def wavelet_denoise(window, thresh_sum, thresh_cnt,
 
     window = window[0:original_length]
 
-    return window, thresh_sum, thresh_cnt
-
+    return window, s_window, thresh_sum, thresh_cnt
 
 def detect_interp_outlier(window, r_avg, fs=1000):
     """

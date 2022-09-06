@@ -1,3 +1,4 @@
+import base64
 import os
 from copy import copy
 from os.path import isfile
@@ -28,7 +29,7 @@ def normalize(batch, batch_extra):  # normalizes the signal
 
 
 def calc_peak_mask(sig : np.array, peak_window = PEAK_WINDOW, peak_sigma = PEAK_SIGMA):
-    # signal should be single channel; 1 x sig_legnth
+    # signal should be single channel; 1 x sig_length
     peaks = return_peaks(sig[:])
     peak_mask = np.zeros(sig.shape)
 
@@ -59,7 +60,6 @@ from denoising import wavelet_denoise, fir_filt
 
 def scale_signals(mecg_sig, fecg_sig):
     mecg, fecg = copy(mecg_sig), copy(fecg_sig)
-    fecg = fir_filt(fecg_sig)
     aecg = mecg + fecg
     aecg_snr = calc_snr(aecg, fir_filt(aecg) + fecg_sig - fecg)
     aecg, mecg, shift = normalize(aecg, aecg - fecg)
@@ -182,6 +182,9 @@ class ECGDataset(Dataset):
         inp['fecg_stft'] = stft(inp['fecg_sig'])
 
         # assert inp['mecg_stft'].shape[0] == 2
+        path = self.dataset[idx]
+        path = path + " " * (100 - len(path))
+        inp['fecg_fname'] = torch.ByteTensor(list(base64.b64encode(path.encode('utf8'))))
 
         if torch.isnan(inp['fecg_stft']).any() or torch.isnan(inp['mecg_stft']).any():
             print(inp)

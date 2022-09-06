@@ -58,31 +58,35 @@ if __name__ == '__main__':
 
     model.eval()
     with torch.no_grad():
-        psum = np.zeros(len(peak_detectors))
-        rsum = np.zeros(len(peak_detectors))
-        fsum = np.zeros(len(peak_detectors))
-        count = 0
-
-        print('training scores:')
-        dl = dm.train_dataloader()
-        for j, d in enumerate(dl):
-            model_output = model(d)
-
-            for i in range(d['fecg_sig'].shape[0]):
-                if d['snr'][i].detach().cpu().numpy() > 166:
-                    for j in range(len(peak_detectors)):
-                        p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
-                        # plt.plot(d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy())
-                        # plt.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
-                        # plt.show()
-                        # exit()
-                        psum[j] += p
-                        rsum[j] += r
-                        fsum[j] += f
-                        count += 1
-
-        print('precision', psum / count, 'recall', rsum / count, 'f1', fsum / count)
-
+        # psum = np.zeros(len(peak_detectors))
+        # rsum = np.zeros(len(peak_detectors))
+        # fsum = np.zeros(len(peak_detectors))
+        # count = 0
+        #
+        # print('training scores:')
+        # dl = dm.train_dataloader()
+        # for j, d in enumerate(dl):
+        #     model_output = model(d)
+        #
+        #     for i in range(d['fecg_sig'].shape[0]):
+        #         if d['snr'][i].detach().cpu().numpy():
+        #             p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
+        #             plt.plot(model_output['x_recon'][i][0].detach().cpu().numpy())
+        #             plt.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
+        #             plt.show()
+    #                 # for j in range(len(peak_detectors)):
+    #                 #     p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
+    #                 #     plt.plot(d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy())
+    #                 #     plt.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
+    #                 #     plt.show()
+    #                 #     # exit()
+    #                 #     psum[j] += p
+    #                 #     rsum[j] += r
+    #                 #     fsum[j] += f
+    #                 #     count += 1
+    #
+    #     print('precision', psum / count, 'recall', rsum / count, 'f1', fsum / count)
+    #
         print('testing scores:')
         psum = np.zeros(len(peak_detectors))
         rsum = np.zeros(len(peak_detectors))
@@ -91,21 +95,37 @@ if __name__ == '__main__':
 
         dl = dm.test_dataloader()
         for j, d in enumerate(dl):
+            from scipy.signal import savgol_filter, resample
             model_output = model(d)
 
             for i in range(d['fecg_sig'].shape[0]):
-                if d['snr'][i].detach().cpu().numpy() > 166:
-                    for j in range(len(peak_detectors)):
-                        p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(),
-                                                     model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
-                        # plt.plot(d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy())
-                        # plt.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
-                        # plt.show()
-                        # exit()
-                        psum[j] += p
-                        rsum[j] += r
-                        fsum[j] += f
-                        count += 1
+                # points = d['mecg_sig'][i][0]
+                # filtered = savgol_filter(points, window_length=10, polyorder=6)
+                # plt.plot(points, color='b')
+                # plt.plot(filtered, color='r')
+                # plt.show()
+                if d['snr'][i].detach().cpu().numpy():
+                    p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
+                    fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+                    ax1.set_title("prediction")
+                    ax1.plot(model_output['x_recon'][i][0].detach().cpu().numpy())
+                    ax2.set_title("ground truth")
+                    ax2.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
+                    ax3.set_title("mecg")
+                    ax3.plot(d['mecg_sig'][i][0].detach().cpu().numpy())
+                    plt.show()
+                    # raise SystemExit
+                    # for j in range(len(peak_detectors)):
+                    #     p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(),
+                    #                                  model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
+                    #     plt.plot(d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy())
+                    #     plt.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
+                    #     plt.show()
+                    #     # exit()
+                    #     psum[j] += p
+                    #     rsum[j] += r
+                    #     fsum[j] += f
+                    #     count += 1
 
         print('precision', psum / count, 'recall', rsum / count, 'f1', fsum / count)
 
@@ -120,16 +140,21 @@ if __name__ == '__main__':
             model_output = model(d)
 
             for i in range(d['fecg_sig'].shape[0]):
-                if d['snr'][i].detach().cpu().numpy() > 166:
-                    for j in range(len(peak_detectors)):
-                        p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
-                        # plt.plot(d['mecg_sig'][i][0].detach().cpu().numpy() + d['fecg_sig'][i][0].detach().cpu().numpy() - model_output['x_recon'][i][0].detach().cpu().numpy())
-                        # plt.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
-                        # plt.show()
-                        # exit()
-                        psum[j] += p
-                        rsum[j] += r
-                        fsum[j] += f
-                        count += 1
+                if d['snr'][i].detach().cpu().numpy():
+                    p, r, f = count_peak_matches(d['fecg_sig'][i][0].detach().cpu().numpy(), model_output['x_recon'][i][0].detach().cpu().numpy(), detector)
+                    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, sharey=True)
+                    ax1.set_title("prediction")
+                    ax1.plot(model_output['x_recon'][i][0].detach().cpu().numpy())
+                    ax2.set_title("ground truth")
+                    ax2.plot(d['fecg_sig'][i][0].detach().cpu().numpy())
+                    ax3.set_title("mecg")
+                    ax3.plot(d['mecg_sig'][i][0].detach().cpu().numpy())
+                    plt.show()
+                    # exit()
+                    # for j in range(len(peak_detectors)):
+                    #     psum[j] += p
+                    #     rsum[j] += r
+                    #     fsum[j] += f
+                    #     count += 1
 
         print('precision', psum / count, 'recall', rsum / count, 'f1', fsum / count)

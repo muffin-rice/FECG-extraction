@@ -10,14 +10,14 @@ from pytorch_lightning.callbacks import TQDMProgressBar
 
 from tqdm import tqdm
 
-from load_data import ECGDataModule
+from load_competition_data import RealECGDataModule
 from vae import VAE
 
 SEED = 1
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'run', 'logging')
-MODEL_NAME = 'test'
+MODEL_NAME = 'modelv4.1'
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'processed')
-LOG_STEPS = 10
+LOG_STEPS = 8
 LEARNING_RATE = 1e-4
 Z_DIM = 64
 LOSS_RATIO = 1000
@@ -26,7 +26,7 @@ NUM_DATA_WORKERS = 8
 BATCH_SIZE = 128
 FIND_UNUSED = False
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
-NUM_EPOCHS = 2000
+NUM_EPOCHS = 40000
 
 if __name__ == '__main__':
     model_log_path = os.path.join(LOG_DIR, MODEL_NAME)
@@ -45,9 +45,10 @@ if __name__ == '__main__':
             )
             return bar
 
-    data = ECGDataModule(data_dir=DATA_DIR, window_size=500, dataset_type='', num_workers=NUM_DATA_WORKERS,
+    data = RealECGDataModule(data_dir=DATA_DIR, window_size=500, dataset_type='', num_workers=NUM_DATA_WORKERS,
                          batch_size=max(2, int(BATCH_SIZE / NUM_TRAINER_WORKERS)))
-    model = VAE(sample_ecgs=[])
+    model = VAE(sample_ecgs=[], mode='recreate')
+    # model = VAE.load_from_checkpoint(os.path.join(model_log_path, f'version_1/checkpoints/last.ckpt'), mode='recreate')
     bar = LitProgressBar()
 
     runner = Trainer(logger=tb_logger,

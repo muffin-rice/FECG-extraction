@@ -128,7 +128,7 @@ class DecoderX(nn.Module):
 
 
 class VAE(pl.LightningModule):
-    def __init__(self, loss_ratio=LOSS_RATIO, learning_rate=LEARNING_RATE, sample_ecgs=[]):
+    def __init__(self, loss_ratio=LOSS_RATIO, learning_rate=LEARNING_RATE, sample_ecgs=[], mode='extract_fecg'):
         super().__init__()
         self.encoderX = EncoderX()
         self.decoderX = DecoderX()
@@ -137,6 +137,7 @@ class VAE(pl.LightningModule):
         self.double()
         self.curr_device = None
         self.sample_ecgs = sample_ecgs
+        self.mode = mode
 
     def stft(self, sig: torch.Tensor):
         if len(sig.shape) == 3:
@@ -156,6 +157,8 @@ class VAE(pl.LightningModule):
             return torch.cat((stft_image.real, stft_image.imag), dim=1)
 
     def loss_function(self, results):
+        if self.mode == 'recreate':
+            return results['logcosh_loss'] + results['kl_loss'] * 0.1
         return results['loss_mse'] * 500 + results['kl_loss'] * 50
 
     @staticmethod
@@ -184,6 +187,16 @@ class VAE(pl.LightningModule):
         return kl
 
     def forward(self, x):
+        if self.mode == 'recreate':
+            mean, std = self.encoderX(F.pad(x, (0, 0)))
+            z = Normal(mean, std)
+            z_sample = z.rsample()  # Equivalent to torch.randn(z_dim) * stddev + mean
+            self.decoderX.skip_in = self.encoderX.skip_out
+            x_recon = self.decoderX(z_sample)
+            recon_loss_logcosh = self.calc_logcosh(x_recon, x)
+            kl_loss = torch.mean(self.kl_divergence(z_sample, mean, std))
+            return {'logcosh_loss': recon_loss_logcosh, 'kl_loss': kl_loss}
+
 
         maternal_mask = x['maternal_mask'][:, :1, :]
         fetal_mask = x['fetal_mask'][:, :1, :]
