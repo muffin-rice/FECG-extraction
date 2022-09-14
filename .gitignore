@@ -1,4 +1,7 @@
-/Data
-/Run
+/data
+/run
 *.xml
 *.iml
+*~
+.*
+__pycache__

@@ -1,10 +1,12 @@
-import numpy as np
-import pywt
-from scipy.signal import firwin2, filtfilt, savgol_filter
 import math
 
+import pywt
+import numpy as np
 
-def fir_filt(window, fs=500):
+from scipy.signal import firwin2, filtfilt, resample, savgol_filter
+
+
+def fir_filt(window, fs=1000, numtaps=31):
     """
     Remove the baseline ("flattening the segment")
     and powerline noise of segment.
@@ -17,7 +19,7 @@ def fir_filt(window, fs=500):
         gain = [0, 1, 1, 0, 0]
         freq = [0, 1, 45, 55, fs / 2]
 
-        b = firwin2(31, freq, gain, fs=fs, window='hamming', antisymmetric=True)
+        b = firwin2(numtaps, freq, gain, fs=fs, window='hamming', antisymmetric=True)
         window = filtfilt(b, 1, window)
 
     return window
@@ -68,6 +70,7 @@ def wav_filt(window, thresh_sum=0, thresh_cnt=0, enable_th=True, fs=1000, wavele
     window = window[0:original_length]
 
     return window, s_window, thresh_sum, thresh_cnt
+
 
 def detect_interp_outlier(window, r_avg, fs=1000):
     """

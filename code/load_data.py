@@ -56,7 +56,7 @@ def calc_snr(original, filtered):
     noise_pow = rssq(original - filtered)
     return 10 * np.log10(sig_pow / noise_pow)
 
-from denoising import wavelet_denoise, fir_filt
+from denoising import fir_filt
 
 def scale_signals(mecg_sig, fecg_sig):
     mecg, fecg = copy(mecg_sig), copy(fecg_sig)
