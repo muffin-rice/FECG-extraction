@@ -4,7 +4,7 @@ from scipy.signal import firwin2, filtfilt, savgol_filter
 import math
 
 
-def fir_filt(window, fs=500, numtaps=31):
+def fir_filt(window, fs, numtaps=31):
     """
     Remove the baseline ("flattening the segment")
     and powerline noise of segment.
@@ -140,3 +140,18 @@ def interp_nan(window):
         window[isnan] = np.interp(x, xp, fp)
 
     return window
+
+def preprocess(window: np.ndarray, sampling_rate, numtaps : int = 0, winlen : int = 0, polyorder : int = 0, wavelet : str = '', lvl : int = 0) -> np.ndarray:
+    
+    if numtaps:
+        window = fir_filt(window, sampling_rate, numtaps=numtaps)
+    light = window
+    
+    if winlen and polyorder:
+        window = savgol_filter(window, winlen, polyorder)
+        
+    if wavelet and lvl:
+        decomp, _, _ = wav_filt(window, wavelet=wavelet, fs=sampling_rate, lvl=lvl)
+        window = decomp[0]
+    
+    return window, light
