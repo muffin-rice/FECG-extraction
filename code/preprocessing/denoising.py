@@ -142,6 +142,8 @@ def interp_nan(window):
     return window
 
 def preprocess(window: np.ndarray, sampling_rate, numtaps : int = 0, winlen : int = 0, polyorder : int = 0, wavelet : str = '', lvl : int = 0) -> np.ndarray:
+    if window.size == 0:
+        return window, window
     
     if numtaps:
         window = fir_filt(window, sampling_rate, numtaps=numtaps)
