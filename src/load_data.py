@@ -11,7 +11,6 @@ from hyperparams import *
 from utils2 import scale_signals, stft_batch, invert_stft_batch, filt, return_peaks, gauss_kernel, \
     generate_gaussian_noise_by_shape, get_random_mfratio, resample_arr, correct_peaks
 
-
 def load_data(data_dir: str) -> np.array:
     dataset = []
     fnames = os.listdir(data_dir)
@@ -282,8 +281,9 @@ class ECGDataModule(LightningDataModule):
 
 
 if __name__ == '__main__':
-    dm = ECGDataModule(data_dir=DATA_DIR, window_size=500, num_workers=0)
-    dataloader = dm.test_dataloader()
+    '''main function creates the sample_ecg file'''
+    dm = ECGDataModule(data_dir=DATA_DIR, window_size=500, num_workers=1)
+    dataloader = dm.val_dataloader()
 
     for i, d in enumerate(dataloader):
         SAMPLE_ECG = d

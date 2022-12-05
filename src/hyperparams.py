@@ -1,4 +1,5 @@
 # HYPERPARAMS
+import os.path
 import pickle as pkl
 
 # execution hyperparameters
@@ -22,8 +23,10 @@ LAMBDA_LR = 0
 LOSS_THRESHOLD=1
 TRAIN_PEAKHEAD = False
 
-with open(SAMPLE_ECG_PKL, 'rb') as f:
-    SAMPLE_ECG = pkl.load(f)
+import os
+if os.path.isfile(SAMPLE_ECG_PKL):
+    with open(SAMPLE_ECG_PKL, 'rb') as f:
+        SAMPLE_ECG = pkl.load(f)
 
 # model hyperparameters
 MODEL = 'unet'
