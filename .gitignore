@@ -1,4 +1,8 @@
+__pycache__
 /Data
 /Run
+Notebooks/
+.DS_Store
+sample_ecg.pkl
 *.xml
 *.iml
