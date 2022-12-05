@@ -5,8 +5,8 @@ import torch
 from scipy.io import savemat
 
 from load_data import ECGDataModule
-from vae import VAE
-from vae_train import DATA_DIR, NUM_DATA_WORKERS, BATCH_SIZE, NUM_TRAINER_WORKERS
+from models.vae import VAE
+from train import DATA_DIR, NUM_DATA_WORKERS, BATCH_SIZE, NUM_TRAINER_WORKERS
 
 run_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'run')
 model_name = 'modelv1.0'
