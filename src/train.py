@@ -2,6 +2,7 @@ import os
 from load_data import ECGDataModule
 from models.unet import UNet
 from models.wnet import WNet
+from models.FECGMem import FECGMem
 from pytorch_lightning import Trainer
 from pytorch_lightning.loops import Loop
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -74,18 +75,29 @@ def get_loss_param_dict():
     }
 
 def make_unet():
+    print('=====Making UNet Model=====')
     return UNet(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
-                fecg_down_params=(NUM_PLANES_DOWN, NUM_KERNELS, NUM_STRIDES),
-                fecg_up_params=(NUM_PLANES_UP, DECODER_KERNELS, DECODER_STRIDES),
+                fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                 batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE)
 
 def make_wnet():
+    print('=====Making WNet Model=====')
     return WNet(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
-                fecg_down_params=(NUM_PLANES_DOWN, NUM_KERNELS, NUM_STRIDES),
-                fecg_up_params=(NUM_PLANES_UP, DECODER_KERNELS, DECODER_STRIDES),
-                mecg_down_params=(NUM_PLANES_DOWN, NUM_KERNELS, NUM_STRIDES),
-                mecg_up_params=(NUM_PLANES_UP, DECODER_KERNELS, DECODER_STRIDES),
+                fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
+                mecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                mecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                 batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE)
+
+def make_fecgmem():
+    print('=====Making FECGMem Model=====')
+    return FECGMem(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
+                   query_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                   value_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                   decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
+                   key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH, train=True,
+                   batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE, window_length=WINDOW_LENGTH,)
 
 def main(**kwargs):
     tb_logger = TensorBoardLogger(save_dir=LOG_DIR, name=MODEL_NAME)
@@ -97,6 +109,8 @@ def main(**kwargs):
         model = make_unet()
     elif MODEL == 'wnet':
         model = make_wnet()
+    elif MODEL == 'fecgmem':
+        model = make_fecgmem()
     else:
         raise NotImplementedError
 
@@ -123,7 +137,10 @@ def main(**kwargs):
                      auto_lr_find=True)
 
     print(f"======= Training {MODEL_NAME} =======")
-    runner.fit(model, datamodule=data)#, ckpt_path=f'Run/Logging/{MODEL_NAME}/version_2/checkpoints/last.ckpt',)
+    if MODEL_VER:
+        runner.fit(model, datamodule=data, ckpt_path=f'Run/Logging/{MODEL_NAME}/version_{MODEL_VER}/checkpoints/last.ckpt',)
+    else:
+        runner.fit(model, datamodule=data)
 
 if __name__ == '__main__':
     main()

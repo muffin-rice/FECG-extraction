@@ -1,15 +1,12 @@
 from torch.utils.data import DataLoader, Dataset
-import scipy.io
-import scipy
+from scipy.io import loadmat
 import numpy as np
 from numpy.random import uniform
 import torch
-import os
-from os.path import isfile
 from pytorch_lightning import LightningDataModule
 from hyperparams import *
-from utils2 import scale_signals, stft_batch, invert_stft_batch, filt, return_peaks, gauss_kernel, \
-    generate_gaussian_noise_by_shape, get_random_mfratio, resample_arr, correct_peaks
+from wfdb.processing import correct_peaks
+from transforms import *
 
 def load_data(data_dir: str) -> np.array:
     dataset = []
@@ -19,81 +16,57 @@ def load_data(data_dir: str) -> np.array:
         if fname != '.DS_Store':
             dataset.append(true_fname)
 
-    # train_data, test_val_data = train_test_split(dataset, test_size=0.5)
-    # test_data, val_data = train_test_split(test_val_data, test_size=0.5)
-
     return np.array(dataset, dtype=object)
-
-def calc_peak_mask(sig : np.array, peak_window = PEAK_SCALE, peak_sigma = PEAK_SIGMA,
-                   binary_peak_window = BINARY_PEAK_WINDOW, actual_peaks = None):
-    # signal should be single channel; 1 x sig_legnth
-
-    if actual_peaks is None:
-        peaks = correct_peaks(return_peaks(sig[:]), sig, window_len=3)
-    else:
-        peaks = correct_peaks(actual_peaks, sig, window_len=3)
-
-    peak_mask = np.zeros(sig.shape)
-
-    binary_peak_mask = np.zeros(sig.shape)
-
-    for peak in peaks:
-        peak = int(peak)
-        if peak >= 500:
-            break
-        left, right = peak-int(peak_window/2), peak+int(peak_window/2)+1
-        peak_mask[left : right] = gauss_kernel(peak_window, peak_sigma)[:len(peak_mask[left : right])]
-
-        binary_peak_mask[peak] = 1
-
-        # if peak < binary_peak_window:
-        #     binary_peak_mask[0:peak+binary_peak_window]= 1
-        # elif peak + binary_peak_window >= binary_peak_mask.shape[0]:
-        #     binary_peak_mask[peak-binary_peak_window:] = 1
-        # else:
-        #     binary_peak_mask[peak-binary_peak_window:peak+binary_peak_window] = 1
-
-    return peak_mask, binary_peak_mask
-
-def calc_multi_channel_peak_mask(sig : np.ndarray, peak_window = PEAK_SCALE, peak_sigma = PEAK_SIGMA, actual_peaks = None):
-    mask = np.zeros(sig.shape)
-    binary_peak_mask = np.zeros(sig.shape)
-
-    for channel in range(sig.shape[0]):
-        mask[channel, :], binary_peak_mask[channel, :] = calc_peak_mask(sig[channel, :], peak_window, peak_sigma,
-                                                                        actual_peaks=actual_peaks)
-
-    return mask, binary_peak_mask
 
 
 class ECGDataset(Dataset):
-    def __init__(self, window_size, data_dir=DATA_DIR, dataset_type: str = None, split: str = 'train',
-                 load_into_memory=LOAD_INTO_MEMORY, load_type : str = 'normal', noise = NOISE, ratio = COMPRESS_RATIO):
+    def __init__(self, window_size, split: str = 'train', data_dir=DATA_DIR, load_type=LOAD_TYPE):
         super(ECGDataset, self).__init__()
         # self.train_data, self.val_data, self.test_data = load_data(data_dir)
+        self.noise = NOISE
+        self.window_size = window_size  # window size
+        self.load_type = load_type
+        self.ratio = COMPRESS_RATIO
+
         if TRAIN_PEAKHEAD:
+            # TODO: remove hardcoded
             self.data_dir = f'Data/competition/{split}'
         else:
             self.data_dir = f'{data_dir}/{split}'
+
+        # TODO: change self.dataset function
         self.dataset = load_data(f'{data_dir}/{split}')
-        self.noise = noise
 
-        self.window_size = window_size  # window size
+        if self.load_type == 'ss':
+            self.create_ss_dataset()
 
-        if load_type == 'ss':
-            num_mecg, num_fecg = self.num_mecg_fecg(self.dataset)
-            # index starts at 1
-            self.mecg_index_list, self.fecg_index_list = list(range(1, num_mecg + 1)), list(range(1, num_fecg + 1))
-            self.mecg_rand_index_list, self.fecg_rand_index_list = list(range(NUM_MECG_RANDS)), list(range(NUM_FECG_RANDS))
+        elif self.load_type == 'whole':
+            self.create_whole_dataset()
 
-        self.load_type = load_type
-        self.ratio = ratio
+        self.transforms = self.create_transforms()
+
 
     def __len__(self):
-        if self.load_type == 'normal':
+        if self.load_type in ('whole', 'normal'):
             return len(self.dataset)
         else:
             return len(self.dataset)//4
+
+    def create_whole_dataset(self):
+        '''dataset built on indices; load separately and then map later'''
+        # TODO: remove hardcode
+        self.fecg_dataset = load_data(f'Data/preprocessed_data/fecg_signal')
+        self.mecg_dataset = load_data(f'Data/preprocessed_data/mecg_signal')
+
+        import pickle as pkl
+        with open(f'{self.data_dir}/index_mapping.pkl', 'rb') as f:
+            self.dataset = pkl.load(f)
+
+    def create_ss_dataset(self):
+        num_mecg, num_fecg = self.num_mecg_fecg(self.dataset)
+        # index starts at 1
+        self.mecg_index_list, self.fecg_index_list = list(range(1, num_mecg + 1)), list(range(1, num_fecg + 1))
+        self.mecg_rand_index_list, self.fecg_rand_index_list = list(range(NUM_MECG_RANDS)), list(range(NUM_FECG_RANDS))
 
     def num_mecg_fecg(self, fnames : [str]):
         max_mecg, max_fecg = 0, 0
@@ -104,112 +77,125 @@ class ECGDataset(Dataset):
 
         return max_mecg - 1, max_fecg - 1
 
-    def get_bad_keys(self, d):
-        # returns the keys that should be removed from the loadmat
-        keys_to_remove = []
-        for k, v in d.items():
-            if type(v) != np.ndarray or 'file' in k or 'fname' in k:
-                keys_to_remove.append(k)
-            else:
-                d[k] = v.astype(np.float32)
+    def create_transforms(self):
+        transforms = []
 
-        return keys_to_remove
+        transforms.append(remove_bad_keys)
+        if self.load_type == 'new':
+            transforms.append(transform_keys)
 
-    def transform_keys(self, d):
-        d2 = {}
-        d2['fecg_sig'] = d['fecg_signal']
-        d2['mecg_sig'] = d['mecg_clean']
-        d2['gt_fecg_sig'] = d['fecg_clean']
-        d2['fecg_peaks'] = d['fecg_peaks'][0]
+        if self.load_type == 'whole': # resmaple with different parameters
+            resampler = Resampler(desired_length=WINDOW_LENGTH * NUM_WINDOWS, shape_index=1, ratio=self.ratio)
+            transforms.append(resampler.perform_initial_trim)
+            transforms.append(resampler.resample_signal)
 
-        return d2
+        else:
+            resampler = Resampler()
+            transforms.append(resampler.resample_signal)
 
-    def load_into_dictionary(self, fname, extend=False):
+        # TODO: add a filter
+        transforms.append(get_signal_masks)
+        transforms.append(check_signal_shapes)
+        transforms.append(check_nans)
+        transforms.append(add_noise_signal)
+
+        if self.load_type == 'whole':
+            transforms.append(split_signal_into_segments)
+            transforms.append(scale_multiple_segments)
+        else:
+            transforms.append(scale_segment)
+
+        return transforms
+
+    def load_paired_item(self, fname, extend=False):
+        '''loads a single signal from some fname that corresponds to a .mat file with
+        the correct signals and peaks'''
         try:
             if extend:
-                inp = scipy.io.loadmat(f'{self.data_dir}/{fname}')
+                inp = loadmat(f'{self.data_dir}/{fname}')
             else:
-                inp = scipy.io.loadmat(fname)
+                inp = loadmat(fname)
         except FileNotFoundError:
             print(f'{fname} not found')
             raise FileNotFoundError
 
-        for key in self.get_bad_keys(inp):
-            inp.pop(key)
-
-        if self.load_type == 'new':
-            inp = self.transform_keys(inp)
-
-        # inp['noise'] = generate_noise_by_shape(shape=inp['fecg_sig'].shape, stdev=NOISE_STD)
-        # noisy_mecg = inp['mecg_sig'] + inp['noise']
-
-        # randomly up/downsample mecg
-        resample_target = int(len(inp['fecg_sig'].T) * uniform(low = self.ratio[0], high = self.ratio[1])) # ratios are 500/600 ==> oppos
-        inp['mecg_sig'] = resample_arr(inp['mecg_sig'].T, resample_target)[:500, 0:].T
-
-        # randomly up/downsample fecg
-        resample_ratio = uniform(low=self.ratio[0], high=self.ratio[1])
-        resample_target = int(len(inp['fecg_sig'].T) * resample_ratio)  # ratios are 500/600 ==> oppos
-        inp['fecg_sig'] = resample_arr(inp['fecg_sig'].T, resample_target)[:500, 0:].T
-        inp['gt_fecg_sig'] = resample_arr(inp['gt_fecg_sig'].T, resample_target)[:500, 0:].T
-        inp['fecg_peaks'] = (resample_ratio * inp['fecg_peaks']).astype(int)
-
-        assert not (torch.isnan(torch.from_numpy(inp['fecg_sig'])).any() or
-                    torch.isnan(torch.from_numpy(inp['mecg_sig'])).any()), f'Signals are nan {inp}'
-
-        # calculate noise first so scaling will occur on mecg sig + noise
-        inp['noise'] = generate_gaussian_noise_by_shape(shape=inp['fecg_sig'].shape, stdev=self.noise)
-
-        # scale and normalize inp['fecg_sig'] and inp['mecg_sig']
-        mf_ratio = get_random_mfratio(MF_RATIO, MF_RATIO_STD)
-        inp['mecg_sig'] += inp['noise'].numpy()
-        _, inp['gt_fecg_sig'], _ = scale_signals(inp['mecg_sig'], inp['gt_fecg_sig'], mf_ratio)
-        inp['mecg_sig'], inp['fecg_sig'], inp['offset'] = scale_signals(inp['mecg_sig'], inp['fecg_sig'], mf_ratio)
-
-        inp['fetal_mask'], inp['binary_fetal_mask'] = calc_multi_channel_peak_mask(inp['fecg_sig'], actual_peaks = inp['fecg_peaks'])
-        inp['maternal_mask'], inp['binary_maternal_mask'] = calc_multi_channel_peak_mask(inp['mecg_sig'])
-
-        assert inp['fetal_mask'].shape == inp['maternal_mask'].shape
+        for transform in self.transforms:
+            transform(inp)
 
         inp['fname'] = fname
-        inp.pop('fecg_peaks') # binary_fetal_mask instead (stacks better)
+        inp.pop('fecg_peaks') # peaks are in binary_fetal_mask instead (stackable)
 
         return inp
 
-    def __getitem__(self, idx, noise=NOISE):
+    def load_ss_item(self, idx):
+        # self supervised; load four different signals and return all of them
+        base_ecg_fname = self.dataset[idx][len(self.data_dir) + 1:]
+        nums = base_ecg_fname.split('_')
+        # indexing weird because format ecg_x_y – x and y are 1-indexed.
+        mecg_num, fecg_num, mecg_rand_window, fecg_rand_window = int(nums[1]), int(nums[2]), int(nums[3]), int(nums[4])
+        diff_mecg = np.random.choice(self.mecg_index_list[:mecg_num - 1] + self.mecg_index_list[mecg_num:])
+        diff_fecg = np.random.choice(self.fecg_index_list[:fecg_num - 1] + self.fecg_index_list[fecg_num:])
+        diff_window_fecg = np.random.choice(
+            self.fecg_rand_index_list[:fecg_rand_window] + self.fecg_rand_index_list[fecg_rand_window + 1:])
+
+        # "correct" dictionary
+        base_dict = self.load_paired_item(base_ecg_fname, extend=True)
+        try:
+            # change the window; latent space diff should be small (SWITCH_FECG_WINDOW_ALPHA)
+            diff_window_dict = self.load_paired_item(
+                f'ecg_{mecg_num:03}_{fecg_num:02}_{mecg_rand_window:02}_{diff_window_fecg:02}', extend=True)
+            # change the mecg; latent space diff should be 0 (FIX_FECG_ALPHA)
+            diff_mecg_dict = self.load_paired_item(
+                f'ecg_{diff_mecg:03}_{fecg_num:02}_{mecg_rand_window:02}_{fecg_rand_window:02}', extend=True)
+            # change the fecg; latent space diff should be big (SWITCH_FECG_ALPHA)
+            diff_fecg_dict = self.load_paired_item(
+                f'ecg_{mecg_num:03}_{diff_fecg:02}_{mecg_rand_window:02}_{fecg_rand_window:02}', extend=True)
+
+        except FileNotFoundError:
+            print(base_ecg_fname)
+            raise FileNotFoundError
+
+        # base == diff_mecg ~= diff_fecg_window != diff_fecg
+        return {'base': base_dict, 'diff_fecg_window': diff_window_dict, 'diff_mecg': diff_mecg_dict,
+                'diff_fecg': diff_fecg_dict}
+
+    def load_indexpair_item(self, index_pair):
+        fecg_fname = self.fecg_dataset[index_pair[0]]
+        mecg_fname = self.mecg_dataset[index_pair[1]]
+
+        try:
+            fecg = loadmat(fecg_fname)
+            mecg = loadmat(mecg_fname)
+        except FileNotFoundError:
+            print(f'{fecg_fname} or {mecg_fname} not found')
+            raise FileNotFoundError
+
+        signal = {}
+        signal['mecg_sig'] = mecg['mecg_signal']
+        signal['fecg_sig'] = fecg['gt_fecg_sig']
+        signal['fecg_peaks'] = fecg['fecg_peaks']
+        signal['noise'] = fecg['fecg_sig'] - fecg['gt_fecg_sig']
+
+        for transform in self.transforms:
+            transform(signal)
+
+        signal['fname'] = (fecg_fname, mecg_fname)
+        signal.pop('fecg_peaks')  # peaks are in binary_fetal_mask instead (stackable)
+
+        return signal
+
+    def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
         if self.load_type in ('normal', 'new'):
-            return self.load_into_dictionary(self.dataset[idx])
+            return self.load_paired_item(self.dataset[idx])
 
         elif self.load_type == 'ss':
-            # self supervised; load four different signals and return all of them
-            base_ecg_fname = self.dataset[idx][len(self.data_dir)+1:]
-            nums = base_ecg_fname.split('_')
-            # indexing weird because format ecg_x_y – x and y are 1-indexed.
-            mecg_num, fecg_num, mecg_rand_window, fecg_rand_window = int(nums[1]), int(nums[2]), int(nums[3]), int(nums[4])
-            diff_mecg = np.random.choice(self.mecg_index_list[:mecg_num-1] + self.mecg_index_list[mecg_num:])
-            diff_fecg = np.random.choice(self.fecg_index_list[:fecg_num-1] + self.fecg_index_list[fecg_num:])
-            diff_window_fecg = np.random.choice(self.fecg_rand_index_list[:fecg_rand_window] + self.fecg_rand_index_list[fecg_rand_window+1:])
+            return self.load_ss_item(idx)
 
-            # "correct" dictionary
-            base_dict = self.load_into_dictionary(base_ecg_fname, extend=True)
-            try:
-                # change the window; latent space diff should be small (SWITCH_FECG_WINDOW_ALPHA)
-                diff_window_dict = self.load_into_dictionary(f'ecg_{mecg_num:03}_{fecg_num:02}_{mecg_rand_window:02}_{diff_window_fecg:02}', extend=True)
-                # change the mecg; latent space diff should be 0 (FIX_FECG_ALPHA)
-                diff_mecg_dict = self.load_into_dictionary(f'ecg_{diff_mecg:03}_{fecg_num:02}_{mecg_rand_window:02}_{fecg_rand_window:02}', extend=True)
-                # change the fecg; latent space diff should be big (SWITCH_FECG_ALPHA)
-                diff_fecg_dict = self.load_into_dictionary(f'ecg_{mecg_num:03}_{diff_fecg:02}_{mecg_rand_window:02}_{fecg_rand_window:02}', extend=True)
-
-            except FileNotFoundError:
-                print(base_ecg_fname)
-                raise FileNotFoundError
-
-
-            # base == diff_mecg ~= diff_fecg_window != diff_fecg
-            return {'base' : base_dict, 'diff_fecg_window' : diff_window_dict, 'diff_mecg' : diff_mecg_dict, 'diff_fecg' : diff_fecg_dict}
+        elif self.load_type == 'whole':
+            return self.load_indexpair_item(self.dataset[idx])
 
 class ECGDataModule(LightningDataModule):
     def __init__(self, data_dir: str, window_size, dataset_type: str = None, batch_size: int = BATCH_SIZE,
@@ -227,7 +213,6 @@ class ECGDataModule(LightningDataModule):
         data = ECGDataset(
             data_dir=self.data_dir,
             window_size=self.window_size,
-            dataset_type=self.dataset_type,
             load_type=self.load_type,
             split='train'
         )
@@ -246,7 +231,6 @@ class ECGDataModule(LightningDataModule):
         data = ECGDataset(
             data_dir=self.data_dir,
             window_size=self.window_size,
-            dataset_type=self.dataset_type,
             load_type=self.load_type,
             split='validation'
         )
@@ -265,7 +249,6 @@ class ECGDataModule(LightningDataModule):
         data = ECGDataset(
             data_dir=self.data_dir,
             window_size=self.window_size,
-            dataset_type=self.dataset_type,
             load_type=self.load_type,
             split='test'
         )

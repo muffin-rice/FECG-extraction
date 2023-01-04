@@ -1,11 +1,8 @@
 import torch
 from torch import nn, optim
 import torch.nn.functional as F
-from torch.distributions import Normal
 import pytorch_lightning as pl
-import math
-import numpy as np
-import matplotlib.pyplot as plt
+from .network_modules import Encoder, Decoder
 
 class WNet(pl.LightningModule):
     def __init__(self, sample_ecg : torch.Tensor, learning_rate : float, mecg_down_params : ((int,),),
@@ -17,29 +14,9 @@ class WNet(pl.LightningModule):
         self.learning_rate = learning_rate
         self.sample_ecg = sample_ecg
 
-        self.mecg_encode = nn.ParameterList()
-        for i in range(len(mecg_down_params[0]) - 2):
-            self.mecg_encode.append(self.make_encoder_block(mecg_down_params[0][i], mecg_down_params[0][i + 1],
-                                                            kernel_size=mecg_down_params[1][i], stride=mecg_down_params[2][i]))
+        self.mecg_encode = Encoder(mecg_down_params, encoder_skip=False)
 
-        self.mecg_encode.append(self.make_encoder_block(mecg_down_params[0][-2], mecg_down_params[0][-1],
-                                                        kernel_size=mecg_down_params[1][-1], stride=mecg_down_params[2][-1]))
-
-        self.mecg_decode = nn.ParameterList()
-        for i in range(len(mecg_up_params[0]) - 2):
-            self.mecg_decode.append(self.make_decoder_block(mecg_up_params[0][i], mecg_up_params[0][i + 1],
-                                                            kernel_size=mecg_up_params[1][i], stride=mecg_up_params[2][i]))
-
-        self.mecg_decode_final = nn.Sequential(
-            nn.ConvTranspose1d(mecg_up_params[0][-2], 1, mecg_up_params[1][-1], mecg_up_params[2][-1], output_padding=1),
-            nn.BatchNorm1d(1),
-            nn.LeakyReLU(inplace=True, negative_slope=0.1),
-            nn.Conv1d(1, 1, kernel_size=5, stride=1, padding='same'),
-            nn.BatchNorm1d(1),
-            nn.LeakyReLU(inplace=True, negative_slope=0.1),
-            nn.Conv1d(1, 1, kernel_size=5, stride=1, padding='same'),
-            nn.Sigmoid(),
-        )
+        self.mecg_decode = Decoder(mecg_up_params, ('sigmoid',))
 
         # no peak head for mecg – focus entirely on the reconstruction
         # self.mecg_peak_head = nn.Sequential(
@@ -47,69 +24,15 @@ class WNet(pl.LightningModule):
         #     nn.Sigmoid(),
         # )
 
-        self.fecg_encode = nn.ParameterList()
-        for i in range(len(fecg_down_params[0])-2):
-            self.fecg_encode.append(self.make_encoder_block(fecg_down_params[0][i], fecg_down_params[0][i + 1],
-                                                            kernel_size=fecg_down_params[1][i], stride=fecg_down_params[2][i]))
+        self.fecg_encode = Encoder(fecg_down_params)
 
-        self.fecg_encode.append(self.make_encoder_block(fecg_down_params[0][-2], fecg_down_params[0][-1],
-                                                        kernel_size=fecg_down_params[1][-1], stride=fecg_down_params[2][-1]))
-
-        self.fecg_decode = nn.ParameterList()
-        for i in range(len(fecg_up_params[0])-2):
-            self.fecg_decode.append(self.make_decoder_block(fecg_up_params[0][i], fecg_up_params[0][i + 1],
-                                                            kernel_size=fecg_up_params[1][i], stride=fecg_up_params[2][i]))
-
-        self.fecg_decode_final = self.make_decoder_block(fecg_up_params[0][-2], 1, fecg_up_params[1][-1],
-                                                        fecg_up_params[2][-1], final_layer=True)
-
-        self.fecg_peak_head = nn.Sequential(
-            nn.ConvTranspose1d(fecg_up_params[0][-2], 1, fecg_up_params[1][-1], fecg_up_params[2][-1], output_padding=1),
-            nn.Sigmoid(),
-        )
+        self.fecg_decode = Decoder(fecg_up_params, ('sigmoid', 'tanh'))
 
         self.loss_params, self.batch_size = loss_ratios, batch_size
 
         self.leaky = nn.LeakyReLU(negative_slope=0.1)
         # change dtype
         self.float()
-
-    def make_decoder_block(self, input_channels, output_channels, kernel_size=8, stride=4, output_padding=1,
-                           final_layer=False):
-
-        if not final_layer: # no leaky at the end to leaky after the skip connection
-            return nn.Sequential(
-                nn.ConvTranspose1d(input_channels, output_channels, kernel_size, stride,
-                                   output_padding=min(output_padding, stride - 1)),
-                nn.BatchNorm1d(output_channels),
-                nn.LeakyReLU(inplace=True, negative_slope=0.1),
-                nn.Conv1d(output_channels, output_channels, kernel_size=3, stride=1, padding='same'),
-                nn.BatchNorm1d(output_channels),
-            )
-        else: # final layer, end with tanH
-            return nn.Sequential(
-                nn.ConvTranspose1d(input_channels, output_channels, kernel_size, stride, output_padding=output_padding),
-                nn.LeakyReLU(inplace=True, negative_slope=0.1),
-                nn.Conv1d(output_channels, output_channels, kernel_size=5, stride=1, padding='same'),
-                nn.BatchNorm1d(output_channels),
-                nn.Tanh(),
-            )
-
-    def make_encoder_block(self, input_channels : int, output_channels : int, kernel_size : int = 4, stride : int = 2,
-                           final_layer : bool = False):
-        if not final_layer:
-            return nn.Sequential(
-                nn.Conv1d(input_channels, output_channels, kernel_size, stride),
-                nn.BatchNorm1d(output_channels),
-                nn.LeakyReLU(0.1, inplace=True),
-                nn.Conv1d(output_channels, output_channels, kernel_size=3, stride=1, padding='same'),
-                nn.BatchNorm1d(output_channels),
-                nn.LeakyReLU(inplace=True, negative_slope=0.1),
-            )
-        else:
-            return nn.Sequential(
-                nn.Conv1d(input_channels, output_channels, kernel_size, stride),
-            )
 
     def make_skip_connection(self, a, b):
         '''makes a skip connection and applies leaky relu'''
@@ -166,60 +89,33 @@ class WNet(pl.LightningModule):
         fecg_sig, mecg_sig = x['fecg_sig'][:, :1, :], x['mecg_sig'][:, :1, :]
         offset, noise = x['offset'][:, :1, :], x['noise'][:, :1, :]
         fetal_mask, maternal_mask = x['fetal_mask'][:, :1, :], x['maternal_mask'][:, :1, :]
-        aecg_sig = fecg_sig + mecg_sig - offset
-        gt_fecg_sig = x['gt_fecg_sig'][:, :1, :]
+        aecg_sig = fecg_sig + mecg_sig - offset + noise
 
         binary_fetal_mask = x['binary_fetal_mask'][:, :1, :]
         binary_maternal_mask = x['binary_maternal_mask'][:, :1, :]
 
         d = {'aecg_sig': aecg_sig, 'binary_fetal_mask': binary_fetal_mask,
-             'binary_maternal_mask': binary_maternal_mask, 'gt_fecg_sig': gt_fecg_sig,
-             'fetal_mask': fetal_mask, 'maternal_mask': maternal_mask, 'fecg_sig': fecg_sig,
-             'mecg_sig': mecg_sig, 'offset' : offset}
+             'binary_maternal_mask': binary_maternal_mask, 'fetal_mask': fetal_mask, 'maternal_mask': maternal_mask,
+             'fecg_sig': fecg_sig, 'mecg_sig': mecg_sig, 'offset' : offset}
 
         for k, v in d.items():
             d[k] = v.type(torch.float32)
 
         return d
 
-
     def forward(self, aecg_sig):
 
         # mecg_encode_outs: [aecg, layer1, layer2, ..., encoded_layer]
-        mecg_encode_outs = [aecg_sig]
-        for layer in self.mecg_encode:
-            mecg_encode_outs.append(layer(mecg_encode_outs[-1]))
+        mecg_encode_outs = self.mecg_encode(aecg_sig, None)
 
-        # mecg_decode_outs: [encoded_layer, layern, layern-1, ..., layer1]
-        mecg_decode_outs = [mecg_encode_outs[-1]]
+        # decoder outputs mecg recon
+        (mecg_recon,), mecg_decode_skips = self.mecg_decode(mecg_encode_outs[-1], mecg_encode_outs)
 
-        mecg_nonskip_outs =[]  # [rawlayern, ..., rawlayer1]
-        for i, layer in enumerate(self.mecg_decode):
-            mecg_nonskip_outs.append(layer(mecg_decode_outs[-1]))
-            mecg_decode_outs.append(self.make_skip_connection(mecg_encode_outs[-i-2], mecg_nonskip_outs[-1]))
+        # fecg_encode_outs : [fecg_sig (noisy), layer1, layer2, ..., layern, encoded_layer]
+        noisy_fecg = aecg_sig - mecg_recon
+        fecg_encode_outs = self.fecg_encode(noisy_fecg, None)
 
-        # skip connection treats fecg as "noise"
-        # however, means that mecg_decode_outs effectively predicts the fecg?
-        # means that fecg_encode_outs[0] is the same as mecg_decode_final[-1] which sort of makes sense
-        mecg_recon = mecg_encode_outs[0] - self.mecg_decode_final(mecg_decode_outs[-1])[:, :, :500]
-
-        # fecg_encode_outs : [fecg_sig (template), layer1, layer2, ..., layern]
-        fecg_encode_outs = [mecg_encode_outs[0] - mecg_recon]
-        for i in range(len(self.fecg_encode)-1):
-            encoder_output = self.fecg_encode[i](fecg_encode_outs[-1])
-            # fecg_encode_outs.append(self.make_skip_connection(encoder_output, mecg_nonskip_outs[-i-1]))
-            fecg_encode_outs.append(encoder_output)
-
-        inner_layer = self.fecg_encode[-1](fecg_encode_outs[-1])
-
-        # fecg_decode_outs: [encoded_layer, layern, ..., layer1]
-        fecg_decode_outs = [inner_layer]
-        for i, layer in enumerate(self.fecg_decode):
-            layer_output = layer(fecg_decode_outs[-1])
-            fecg_decode_outs.append(self.make_skip_connection(fecg_encode_outs[-i-1], layer_output))
-
-        fecg_peak_recon = self.fecg_peak_head(fecg_decode_outs[-1])[:, :, :500]
-        fecg_recon = self.fecg_decode_final(fecg_decode_outs[-1])[:, :, :500]
+        (fecg_peak_recon, fecg_recon), fecg_decode_skips = self.fecg_decode(fecg_encode_outs[-1], fecg_encode_outs)
 
         return {'mecg_recon' : mecg_recon, 'fecg_recon' : fecg_recon, 'fecg_mask_recon' : fecg_peak_recon}
 
@@ -227,7 +123,7 @@ class WNet(pl.LightningModule):
         d = self.remap_input(batch)
         model_outputs = self.forward(d['aecg_sig'])
 
-        loss_dict = self.calculate_losses_into_dict(model_outputs['fecg_recon'], d['gt_fecg_sig'], model_outputs['mecg_recon'],
+        loss_dict = self.calculate_losses_into_dict(model_outputs['fecg_recon'], d['fecg_sig'], model_outputs['mecg_recon'],
                                                     d['mecg_sig'], model_outputs['fecg_mask_recon'], d['binary_fetal_mask'],
                                                     d['offset'])
 
@@ -239,7 +135,7 @@ class WNet(pl.LightningModule):
         d = self.remap_input(batch)
         model_outputs = self.forward(d['aecg_sig'])
 
-        loss_dict = self.calculate_losses_into_dict(model_outputs['fecg_recon'], d['gt_fecg_sig'], model_outputs['mecg_recon'],
+        loss_dict = self.calculate_losses_into_dict(model_outputs['fecg_recon'], d['fecg_sig'], model_outputs['mecg_recon'],
                                                     d['mecg_sig'], model_outputs['fecg_mask_recon'], d['binary_fetal_mask'],
                                                     d['offset'])
 
@@ -252,7 +148,7 @@ class WNet(pl.LightningModule):
         d = self.remap_input(batch)
         model_outputs = self.forward(d['aecg_sig'])
 
-        loss_dict = self.calculate_losses_into_dict(model_outputs['fecg_recon'], d['gt_fecg_sig'], model_outputs['mecg_recon'],
+        loss_dict = self.calculate_losses_into_dict(model_outputs['fecg_recon'], d['fecg_sig'], model_outputs['mecg_recon'],
                                                     d['mecg_sig'], model_outputs['fecg_mask_recon'], d['binary_fetal_mask'],
                                                     d['offset'])
 

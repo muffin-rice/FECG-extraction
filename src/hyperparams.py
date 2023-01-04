@@ -2,20 +2,84 @@
 import os.path
 import pickle as pkl
 
+from argparse import ArgumentParser
+parser = ArgumentParser()
+
+# model arguments
+parser.add_argument('--model', type=str, default='unet',
+                    help='model to use for fecg extraction')
+parser.add_argument('--blocks', type=int, default=(8,8,8,8), nargs='+',
+                    help='number of blocks')
+parser.add_argument('--down_planes', type=int, default=(1,64,64,64,64), nargs='+',
+                    help='number of planes in encoder')
+parser.add_argument('--down_kernels', type=int, default=(5,3,3,3), nargs='+',
+                    help='kernel size in encoder')
+parser.add_argument('--down_strides', type=int, default=(3,2,1,1), nargs='+',
+                    help='stride length in encoder')
+parser.add_argument('--up_planes', type=int, default=(64,64,64,64,1), nargs='+',
+                    help='number of planes in decoder')
+parser.add_argument('--up_kernels', type=int, default=(3,3,4,6), nargs='+',
+                    help='kernel size in decoder')
+parser.add_argument('--up_strides', type=int, default=(1,1,2,3), nargs='+',
+                    help='stride length in decoder')
+parser.add_argument('--learning_rate', type=float, default=1e-4,
+                    help='learning rate')
+parser.add_argument('--memory_length', type=int, default=20,
+                    help='size of memory in model')
+
+# sys arguments
+parser.add_argument('--model_name', type=str, default='unet_v1',
+                    help='model name to save for logging')
+parser.add_argument('--model_ver', type=str, default='',
+                    help='model version to load checkpoint from (default no ckpt)')
+parser.add_argument('--data_dir', type=str, default='Data/preprocessed_data/paired',
+                    help='data directory')
+parser.add_argument('--log_dir', type=str, default='Run/Logging',
+                    help='logging directory')
+parser.add_argument('--seed', type=int, default=1,
+                    help='seed number')
+parser.add_argument('--log_steps', type=int, default=10,
+                    help='log every n steps')
+parser.add_argument('--device', type=str, default='cpu',
+                    help='device to use in pytorch lightning')
+
+# data arguments
+parser.add_argument('--load_type', type=str, default='new',
+                    help='which data type to load')
+parser.add_argument('--window_length', type=int, default=250,
+                    help='size of windows to pass as inputs to model')
+parser.add_argument('--batch_size', type=int, default=128,
+                    help='batch size')
+parser.add_argument('--data_workers', type=int, default=8,
+                    help='number of lightning data workers')
+parser.add_argument('--noise', type=float, default=0.0,
+                    help='random uniform noise to add to data in noise param')
+
+# train arguments
+parser.add_argument('--trainer_workers', type=int, default=1,
+                    help='number of lightning training workers')
+parser.add_argument('--num_epochs', type=int, default=120,
+                    help='number of epochs')
+parser.add_argument('--num_windows', type=int, default=100,
+                    help='number of windows to split up a signal')
+
+args, unknown = parser.parse_known_args()
+
 # execution hyperparameters
-SEED = 1
-LOG_DIR = 'Run/Logging'
-MODEL_NAME = 'unet_v1'
-DATA_DIR = 'Data/preprocessed_data/paired'
-LOG_STEPS = 10
-LEARNING_RATE = 1e-3
+SEED = args.seed
+LOG_DIR = args.log_dir
+MODEL_NAME = args.model_name
+MODEL_VER = args.model_ver
+DATA_DIR = args.data_dir
+LOG_STEPS = args.log_steps
+LEARNING_RATE = args.learning_rate
 # DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-DEVICE = 'cpu'
-NUM_TRAINER_WORKERS = 1
-NUM_DATA_WORKERS = 8
-BATCH_SIZE = 128
+DEVICE = args.device
+NUM_TRAINER_WORKERS = args.trainer_workers
+NUM_DATA_WORKERS = args.data_workers
+BATCH_SIZE = args.batch_size
 FIND_UNUSED=False
-NUM_EPOCHS = 120
+NUM_EPOCHS = args.num_epochs
 SAMPLE_ECG_PKL = 'sample_ecg.pkl'
 SAVE_N_STEPS = 500
 TRAIN_PER_VAL_RUN = 1
@@ -29,16 +93,16 @@ if os.path.isfile(SAMPLE_ECG_PKL):
         SAMPLE_ECG = pkl.load(f)
 
 # model hyperparameters
-MODEL = 'unet'
+MODEL = args.model
 Z_DIM = 128
-NUM_BLOCKS = (8,8,8,8)
-NUM_STRIDES = (3,3,2,1,1)
-NUM_KERNELS = (5,5,3,3,3)
-DECODER_KERNELS = (3,3,3,6,5)
-DECODER_STRIDES = (1,1,2,3,3)
-NUM_PLANES_UP = (64,64,64,64,64,1)
-NUM_PLANES_DOWN = (1,64,64,64,64,64)
-assert len(NUM_PLANES_UP) == len(NUM_PLANES_DOWN)
+NUM_BLOCKS = tuple(args.blocks)
+DOWN_PLANES = tuple(args.down_planes)
+DOWN_KERNELS = tuple(args.down_kernels)
+DOWN_STRIDES = tuple(args.down_strides)
+UP_PLANES = tuple(args.up_planes)
+UP_KERNELS = tuple(args.up_kernels)
+UP_STRIDES = tuple(args.up_strides)
+assert len(UP_PLANES) == len(DOWN_PLANES)
 START_CHANNELS = 1
 END_CHANNELS = 3
 RECON_SIG = 'gt_fecg' # signal to reconstruct
@@ -46,6 +110,10 @@ SKIP = True
 # attention hyperparameters
 EMBED_DIM = 166
 ATTENTION = False
+WINDOW_LENGTH = args.window_length
+MEMORY_LENGTH = args.memory_length
+KEY_DIM = 128
+VAL_DIM = 128
 
 # loss hyperparams (new)
 FECG_RATIO = 20 # fecg recon
@@ -53,36 +121,17 @@ FECG_BCE_RATIO = 1 # fecg bce peak mask
 FECG_BCE_CLASS_RATIO = 1
 MECG_RATIO = 1 # mecg recon
 
-# loss hyperparameters
-LOG_COSH_FACTOR = 0 # factor for loss_log_cosh
-MSE_LOSS_RATIO = 10 # factor for raw MSE
-MAE_LOSS_RATIO = 30
-KL_FACTOR = 1 # factor for KL loss
-PEAK_SCALE = 5 # parameters for peak mask; centered around GT peaks and scaled by PEAK_SCALE
-PEAK_SIGMA = 1 # std for peak mask for each peak
-FETAL_MASK_LOSS_FACTOR = 300 # factor for the peak loss
-MATERNAL_MASK_LOSS_FACTOR = 50 # factor for the peak loss
-# peak head learning factors
-BCE_LOSS_RATIO = .1
-BCE_CLASS_RATIO = 5
-# mecg peak head learning factors
-BCE_MECG_LOSS_RATIO = .1
-BCE_MECG_CLASS_RATIO = 5
-MECG_LOSS_RATIO = 1
-# contrastive learning factors
-SS_LOSS_RATIO = 1 # overall loss factor for the contrastive learning
-FIX_FECG_ALPHA = 10 # factor for fixing the fecg (changing mecg)
-SWITCH_FECG_WINDOW_ALPHA = 1 # factor for switching fecg window (fixing mecg)
-SWITCH_FECG_ALPHA = -8 # factor for switching fecg (fixing mecg)
-
 # data
 DROP_LAST = False
 MF_RATIO = 4
 MF_RATIO_STD = 0.5
-LOAD_TYPE = 'new'
+LOAD_TYPE = args.load_type
+NUM_WINDOWS = args.num_windows
 LOAD_INTO_MEMORY = False
 NUM_MECG_RANDS = 5
 NUM_FECG_RANDS = 10
-NOISE = 0.0 # ideal noise is 0.001
+NOISE = args.noise # ideal noise is 0.001
 BINARY_PEAK_WINDOW = 0 # +-2 marked as 1
 COMPRESS_RATIO = (0.84,1.16)
+PEAK_SCALE = 1
+PEAK_SIGMA = 1
