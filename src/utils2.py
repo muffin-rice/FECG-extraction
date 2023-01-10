@@ -60,17 +60,22 @@ def normalize(aecg : np.array):  # returns offset and scale factor for normaliza
     return offset_scaled, scale_factor_repeat
 
 
-def correct_peaks(peaks, sig, window_len):
+def correct_peaks(peaks, sig, window_radius):
+    # primitive peak direction tester 
+    if -sig.min() > sig.max(): # peaks are on the mins
+        argpeak = np.argmin 
+    else:
+        argpeak = np.argmax
 
     new_peaks = []
     for i, peak in enumerate(peaks):
         if peak > len(sig):
             break
 
-        start = max(0, peak-window_len)
-        end = min(len(sig) - 1, peak+window_len)
+        start = max(0, peak - window_radius)
+        end = min(len(sig) - 1, peak + window_radius)
 
-        new_peaks.append(np.argmax(sig[start:end+1]).astype(int) + start)
+        new_peaks.append(argpeak(sig[start:end+1]).astype(int) + start)
 
     return new_peaks
 

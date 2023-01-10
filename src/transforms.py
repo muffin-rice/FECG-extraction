@@ -2,21 +2,37 @@ import numpy as np
 from utils2 import scale_signals, generate_gaussian_noise_by_shape, get_random_mfratio, resample_signal_noise_peak, \
     return_peaks, gauss_kernel, correct_peaks
 from hyperparams import MF_RATIO, NUM_WINDOWS, MF_RATIO_STD, WINDOW_LENGTH, PEAK_SCALE, PEAK_SIGMA, BINARY_PEAK_WINDOW, NOISE
+from math import cos, sqrt, pi, sin
+from scipy import signal as ss
+from torchaudio.functional import bandpass_biquad
+from torch import from_numpy
 
 def transform_keys(signal_dict):
     signal_dict['fecg_sig'] = signal_dict['fecg_clean']
     signal_dict['mecg_sig'] = signal_dict['mecg_clean']
-    signal_dict['fecg_peaks'] = signal_dict['fecg_peaks'][0]
+    signal_dict['fecg_peaks'] = signal_dict['fecg_peaks'][0].astype(int)
     signal_dict['noise'] = signal_dict['mecg_signal'] - signal_dict['mecg_clean']
+
+def downsample_fecg(signal):
+    signal['fecg_sig'] = ss.resample(signal['fecg_sig'][0,:], int(signal['fecg_sig'].shape[1]/2))[np.newaxis,:]
+
+class Filterer:
+    def __init__(self, numtaps, fs = 125):
+        self.numtaps = numtaps
+        self.fs = fs
+
+    def perform_filter(self, window):
+        window['mecg_sig'] = bandpass_biquad(from_numpy(window['mecg_sig']), sample_rate=125, central_freq=55).numpy()
+
 
 def calc_peak_mask(sig : np.array, peak_window = PEAK_SCALE, peak_sigma = PEAK_SIGMA,
                    binary_peak_window = BINARY_PEAK_WINDOW, actual_peaks = None):
     # signal should be single channel; 1 x sig_length
 
     if actual_peaks is None:
-        peaks = correct_peaks(return_peaks(sig), sig, window_len=3)
+        peaks = correct_peaks(return_peaks(sig), sig, window_radius=5)
     else:
-        peaks = correct_peaks(actual_peaks, sig, window_len=3)
+        peaks = correct_peaks(actual_peaks, sig, window_radius=5)
 
     peak_mask = np.zeros(sig.shape)
 
@@ -68,23 +84,25 @@ def remove_bad_keys(signal):
 
 class Resampler:
     '''create additional class to store length and other parameters'''
-    def __init__(self, desired_length = 500, shape_index=1, ratio=(0.84, 1.16)):
+    def __init__(self, desired_length = 500, shape_index=1, ratio=(0.84, 1.16), offset=50):
         self.desired_length = desired_length
         self.shape_index = shape_index
         self.ratio = ratio
+        self.offset = offset
 
     def perform_initial_trim(self, signal):
         '''trim if necessary to reduce computational load on resampling'''
-        trim_length = int(self.desired_length * 1.5)
+        trim_length = int(self.desired_length * 1.5+self.offset)
         if signal['mecg_sig'].shape[self.shape_index] < trim_length:
             return
 
         # TODO: change if statement handling
         if self.shape_index == 1:
-            signal['mecg_sig'] = signal['mecg_sig'][:,:trim_length]
-            signal['fecg_sig'] = signal['fecg_sig'][:,:trim_length]
-            signal['noise'] = signal['noise'][:,:trim_length]
-            signal['fecg_peaks'] = signal['fecg_peaks'][signal['fecg_peaks'] < trim_length]
+            signal['mecg_sig'] = signal['mecg_sig'][:,self.offset:trim_length]
+            signal['fecg_sig'] = signal['fecg_sig'][:,self.offset:trim_length]
+            signal['noise'] = signal['noise'][:,self.offset:trim_length]
+            signal['fecg_peaks'] = signal['fecg_peaks'][(signal['fecg_peaks'] < trim_length) &
+                                                        (self.offset < signal['fecg_peaks'])].astype(int) - self.offset
         else:
             raise NotImplementedError
 

@@ -20,13 +20,14 @@ def load_data(data_dir: str) -> np.array:
 
 
 class ECGDataset(Dataset):
-    def __init__(self, window_size, split: str = 'train', data_dir=DATA_DIR, load_type=LOAD_TYPE):
+    def __init__(self, window_size, split: str = 'train', numtaps = NUM_TAPS, data_dir=DATA_DIR, load_type=LOAD_TYPE):
         super(ECGDataset, self).__init__()
         # self.train_data, self.val_data, self.test_data = load_data(data_dir)
         self.noise = NOISE
         self.window_size = window_size  # window size
         self.load_type = load_type
         self.ratio = COMPRESS_RATIO
+        self.num_taps = numtaps
 
         if TRAIN_PEAKHEAD:
             # TODO: remove hardcoded
@@ -81,10 +82,14 @@ class ECGDataset(Dataset):
         transforms = []
 
         transforms.append(remove_bad_keys)
+
         if self.load_type == 'new':
             transforms.append(transform_keys)
 
         if self.load_type == 'whole': # resmaple with different parameters
+            transforms.append(downsample_fecg)
+            filterer = Filterer(numtaps=self.num_taps)
+            transforms.append(filterer.perform_filter)
             resampler = Resampler(desired_length=WINDOW_LENGTH * NUM_WINDOWS, shape_index=1, ratio=self.ratio)
             transforms.append(resampler.perform_initial_trim)
             transforms.append(resampler.resample_signal)
@@ -93,7 +98,6 @@ class ECGDataset(Dataset):
             resampler = Resampler()
             transforms.append(resampler.resample_signal)
 
-        # TODO: add a filter
         transforms.append(get_signal_masks)
         transforms.append(check_signal_shapes)
         transforms.append(check_nans)
@@ -173,7 +177,7 @@ class ECGDataset(Dataset):
         signal = {}
         signal['mecg_sig'] = mecg['mecg_signal']
         signal['fecg_sig'] = fecg['gt_fecg_sig']
-        signal['fecg_peaks'] = fecg['fecg_peaks']
+        signal['fecg_peaks'] = fecg['fecg_peaks'].astype(int)
         signal['noise'] = fecg['fecg_sig'] - fecg['gt_fecg_sig']
 
         for transform in self.transforms:
@@ -199,7 +203,8 @@ class ECGDataset(Dataset):
 
 class ECGDataModule(LightningDataModule):
     def __init__(self, data_dir: str, window_size, dataset_type: str = None, batch_size: int = BATCH_SIZE,
-                 num_workers: int = NUM_DATA_WORKERS, pin_memory: bool = False, load_type : str = LOAD_TYPE):
+                 num_workers: int = NUM_DATA_WORKERS, pin_memory: bool = False, load_type : str = LOAD_TYPE,
+                 num_taps : int = NUM_TAPS):
         super().__init__()
         self.data_dir = data_dir
         self.window_size = window_size
@@ -208,12 +213,14 @@ class ECGDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.load_type = load_type
+        self.num_taps = num_taps
 
     def train_dataloader(self):
         data = ECGDataset(
             data_dir=self.data_dir,
             window_size=self.window_size,
             load_type=self.load_type,
+            numtaps=self.num_taps,
             split='train'
         )
 
@@ -232,6 +239,7 @@ class ECGDataModule(LightningDataModule):
             data_dir=self.data_dir,
             window_size=self.window_size,
             load_type=self.load_type,
+            numtaps=self.num_taps,
             split='validation'
         )
 
@@ -250,6 +258,7 @@ class ECGDataModule(LightningDataModule):
             data_dir=self.data_dir,
             window_size=self.window_size,
             load_type=self.load_type,
+            numtaps=self.num_taps,
             split='test'
         )
 

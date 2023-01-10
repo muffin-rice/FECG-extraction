@@ -54,6 +54,8 @@ parser.add_argument('--data_workers', type=int, default=8,
                     help='number of lightning data workers')
 parser.add_argument('--noise', type=float, default=0.0,
                     help='random uniform noise to add to data in noise param')
+parser.add_argument('--numtaps', type=int, default=31,
+                    help='numtaps for MECG filtering')
 
 # train arguments
 parser.add_argument('--trainer_workers', type=int, default=1,
@@ -127,6 +129,7 @@ MF_RATIO = 4
 MF_RATIO_STD = 0.5
 LOAD_TYPE = args.load_type
 NUM_WINDOWS = args.num_windows
+NUM_TAPS = args.numtaps
 LOAD_INTO_MEMORY = False
 NUM_MECG_RANDS = 5
 NUM_FECG_RANDS = 10
