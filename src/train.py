@@ -74,15 +74,33 @@ def get_loss_param_dict():
         'fp_bce_class' : FECG_BCE_CLASS_RATIO-1
     }
 
-def make_unet():
+def make_unet(path : str = ''):
     print('=====Making UNet Model=====')
+    if path:
+        return UNet.load_from_checkpoint(path,
+                                         sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
+                                         fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                                         fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
+                                         batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE
+                                         )
+
     return UNet(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
                 fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                 fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                 batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE)
 
-def make_wnet():
+def make_wnet(path : str = ''):
     print('=====Making WNet Model=====')
+    if path:
+        return WNet.load_from_checkpoint(path,
+                                         sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
+                                         fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                                         fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
+                                         mecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                                         mecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
+                                         batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE
+                                         )
+
     return WNet(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
                 fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                 fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
@@ -90,14 +108,20 @@ def make_wnet():
                 mecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                 batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE)
 
-def make_fecgmem():
+def make_fecgmem(path : str = PRETRAINED_UNET_CKPT):
     print('=====Making FECGMem Model=====')
+    if path:
+        pretrained_unet = make_unet(path)
+    else:
+        pretrained_unet = None
+
     return FECGMem(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
                    query_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                    value_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                    decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                    key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH, train=True,
-                   batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE, window_length=WINDOW_LENGTH,)
+                   batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE, window_length=WINDOW_LENGTH,
+                   pretrained_unet=pretrained_unet)
 
 def main(**kwargs):
     tb_logger = TensorBoardLogger(save_dir=LOG_DIR, name=MODEL_NAME)

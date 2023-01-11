@@ -26,6 +26,8 @@ parser.add_argument('--learning_rate', type=float, default=1e-4,
                     help='learning rate')
 parser.add_argument('--memory_length', type=int, default=20,
                     help='size of memory in model')
+parser.add_argument('--pretrained_unet', type=str, default='',
+                    help='pretrained unet value encoder/decoder ckpt (blank if train from scratch)')
 
 # sys arguments
 parser.add_argument('--model_name', type=str, default='unet_v1',
@@ -118,6 +120,7 @@ WINDOW_LENGTH = args.window_length
 MEMORY_LENGTH = args.memory_length
 KEY_DIM = 128
 VAL_DIM = 128
+PRETRAINED_UNET_CKPT = args.pretrained_unet
 
 # loss hyperparams (new)
 FECG_RATIO = 20 # fecg recon

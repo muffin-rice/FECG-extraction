@@ -168,17 +168,19 @@ def scale_segment(segment, mf_ratio=None):
     if mf_ratio is None:
         mf_ratio = get_random_mfratio(MF_RATIO, MF_RATIO_STD)
 
+    segment['mf_ratio'] = mf_ratio
+
     segment['mecg_sig'], segment['fecg_sig'], segment['offset'] = scale_signals(segment['mecg_sig'],
                                                                                 segment['fecg_sig'], mf_ratio,
                                                                                 segment['noise'])
 
-    return segment['mecg_sig'], segment['fecg_sig'], segment['offset']
 
 
 def scale_multiple_segments(signal):
     '''scales multiple segments'''
     mf_ratio = get_random_mfratio(MF_RATIO, MF_RATIO_STD)
     signal['offset'] = np.zeros_like(signal['mecg_sig'])
+    signal['mf_ratio'] = mf_ratio
     for i in range(NUM_WINDOWS):
         signal['mecg_sig'][i, :], signal['fecg_sig'][i, :], signal['offset'][i, :] = scale_signals(
             signal['mecg_sig'][[i], :],

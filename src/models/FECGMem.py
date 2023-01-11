@@ -6,19 +6,26 @@ from .network_modules import Encoder, KeyProjector, Decoder
 import math
 from numpy import sqrt
 from .losses import *
+from .unet import UNet
 
 class FECGMem(pl.LightningModule):
     '''FECG with memory storage'''
     def __init__(self, sample_ecg, window_length, query_encoder_params : ((int,),), key_dim : int, val_dim : int,
                  value_encoder_params : ((int,),), decoder_params : ((int,),), memory_length : int,
-                 batch_size : int, learning_rate : float, loss_ratios : {str : int}, train=False):
+                 batch_size : int, learning_rate : float, loss_ratios : {str : int}, pretrained_unet : UNet,
+                 train=False,):
         super().__init__()
         self.window_length = window_length
+        if pretrained_unet is not None:
+            self.value_encoder = pretrained_unet.fecg_encode
+            self.value_decoder = pretrained_unet.fecg_decode
+        else:
+            self.decoder = Decoder(decoder_params, head_params=('tanh', 'sigmoid'))
+            self.value_encoder = Encoder(value_encoder_params)
+
         self.key_encoder = Encoder(query_encoder_params)
-        self.value_encoder = Encoder(value_encoder_params)
         self.key_dim = key_dim
         self.val_dim = val_dim
-        self.decoder = Decoder(decoder_params, head_params=('tanh','sigmoid'))
         self.memory_initialized = False
         self.batch_size = batch_size
         self.memory_length = memory_length
