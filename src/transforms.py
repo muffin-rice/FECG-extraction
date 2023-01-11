@@ -4,6 +4,7 @@ from utils2 import scale_signals, generate_gaussian_noise_by_shape, get_random_m
 from hyperparams import MF_RATIO, NUM_WINDOWS, MF_RATIO_STD, WINDOW_LENGTH, PEAK_SCALE, PEAK_SIGMA, BINARY_PEAK_WINDOW, NOISE
 from math import cos, sqrt, pi, sin
 from scipy import signal as ss
+from scipy.signal import filtfilt, butter
 from torchaudio.functional import bandpass_biquad
 from torch import from_numpy
 
@@ -17,13 +18,18 @@ def downsample_fecg(signal):
     signal['fecg_sig'] = ss.resample(signal['fecg_sig'][0,:], int(signal['fecg_sig'].shape[1]/2))[np.newaxis,:]
 
 class Filterer:
-    def __init__(self, numtaps, fs = 125):
-        self.numtaps = numtaps
+    def __init__(self, fs = 125, lowcut = 1, highcut = 55, order=3):
         self.fs = fs
+        self.lowcut = lowcut
+        self.highcut = highcut
+        self.order = order
 
     def perform_filter(self, window):
-        window['mecg_sig'] = bandpass_biquad(from_numpy(window['mecg_sig']), sample_rate=125, central_freq=55).numpy()
-
+        nyquist = self.fs/2
+        low = self.lowcut / nyquist
+        high = self.highcut / nyquist
+        b, a = butter(self.order, [low, high], btype='bandpass', analog=False, output='ba')
+        window['mecg_sig'] = filtfilt(b, a, window['mecg_sig'])
 
 def calc_peak_mask(sig : np.array, peak_window = PEAK_SCALE, peak_sigma = PEAK_SIGMA,
                    binary_peak_window = BINARY_PEAK_WINDOW, actual_peaks = None):

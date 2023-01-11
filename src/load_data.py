@@ -88,7 +88,7 @@ class ECGDataset(Dataset):
 
         if self.load_type == 'whole': # resmaple with different parameters
             transforms.append(downsample_fecg)
-            filterer = Filterer(numtaps=self.num_taps)
+            filterer = Filterer()
             transforms.append(filterer.perform_filter)
             resampler = Resampler(desired_length=WINDOW_LENGTH * NUM_WINDOWS, shape_index=1, ratio=self.ratio)
             transforms.append(resampler.perform_initial_trim)

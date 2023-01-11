@@ -42,6 +42,8 @@ parser.add_argument('--log_steps', type=int, default=10,
                     help='log every n steps')
 parser.add_argument('--device', type=str, default='cpu',
                     help='device to use in pytorch lightning')
+parser.add_argument('--sample_ecg_path', type=str, default='sample_ecg.pkl',
+                    help='sample ecg for model runs')
 
 # data arguments
 parser.add_argument('--load_type', type=str, default='new',
@@ -82,7 +84,7 @@ NUM_DATA_WORKERS = args.data_workers
 BATCH_SIZE = args.batch_size
 FIND_UNUSED=False
 NUM_EPOCHS = args.num_epochs
-SAMPLE_ECG_PKL = 'sample_ecg.pkl'
+SAMPLE_ECG_PKL = args.sample_ecg_path
 SAVE_N_STEPS = 500
 TRAIN_PER_VAL_RUN = 1
 LAMBDA_LR = 0
