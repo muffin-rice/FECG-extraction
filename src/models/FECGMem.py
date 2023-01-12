@@ -251,3 +251,8 @@ class FECGMem(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer
+
+    def print_summary(self, depth = 7):
+        from torchinfo import summary
+        random_input = torch.rand((2, 1, 250))
+        return summary(self, input_data=random_input, depth=depth)

@@ -108,9 +108,20 @@ def make_wnet(path : str = ''):
                 mecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                 batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE)
 
-def make_fecgmem(path : str = PRETRAINED_UNET_CKPT):
+def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
     print('=====Making FECGMem Model=====')
     if path:
+        return FECGMem.load_from_checkpoint(path,
+                                            sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
+                                            query_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                                            value_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                                            decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
+                                            key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH, train=True,
+                                            batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
+                                            window_length=WINDOW_LENGTH, pretrained_unet = None
+                                            )
+
+    if unet_path:
         pretrained_unet = make_unet(path)
     else:
         pretrained_unet = None
