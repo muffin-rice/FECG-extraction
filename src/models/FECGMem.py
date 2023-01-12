@@ -19,8 +19,13 @@ class FECGMem(pl.LightningModule):
         if pretrained_unet is not None:
             self.value_encoder = pretrained_unet.fecg_encode
             self.value_decoder = pretrained_unet.fecg_decode
+
+            self.value_encoder.freeze()
+            self.value_decoder.freeze()
+
+            print('Using pretrained value encoder/decoder; training key_encoder')
         else:
-            self.decoder = Decoder(decoder_params, head_params=('tanh', 'sigmoid'))
+            self.value_decoder = Decoder(decoder_params, head_params=('sigmoid', 'tanh'))
             self.value_encoder = Encoder(value_encoder_params)
 
         self.key_encoder = Encoder(query_encoder_params)
@@ -40,20 +45,20 @@ class FECGMem(pl.LightningModule):
         # self.memory_key_proj
 
     def encode_value(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
-        '''encodes the key, returns the encoded key with projection (if any) and the skips'''
+        '''encodes the value, returns the encoded value with projection (if any) and the skips'''
         assert segment.shape[2] == self.window_length
-        encode_outs = self.key_encoder(segment)
+        encode_outs = self.value_encoder(segment)
         # return self.query_key_proj(encode_outs[-1]), encode_outs
         return encode_outs[-1], encode_outs
 
     def encode_query(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
-        '''gets the encoded value given the recon guesses and the next aecg sig segment'''
-        # encoded_values = self.value_encoder(torch.stack((segment, *recon), dim=1))
-        encoded_values = self.value_encoder(segment)
-        return encoded_values[-1], encoded_values
+        '''gets the encoded value given aecg segment'''
 
-    def decode_value(self, key : torch.Tensor, key_skips) -> torch.Tensor:
-        initial_guess, _ = self.decoder(key, key_skips)
+        encoded_key = self.key_encoder(segment)
+        return encoded_key[-1], encoded_key
+
+    def decode_value(self, value : torch.Tensor, value_skips) -> torch.Tensor:
+        initial_guess, _ = self.value_decoder(value, value_skips)
 
         return initial_guess
 
@@ -176,8 +181,8 @@ class FECGMem(pl.LightningModule):
 
         self._initialize_memory(initial_query, initial_value)
 
-        fecg_recon[:,0,:] = initial_guess[0][:,0,:self.window_length]
-        fecg_peak_recon[:,0,:] = initial_guess[1][:,0,:self.window_length]
+        fecg_peak_recon[:,0,:] = initial_guess[0][:,0,:self.window_length]
+        fecg_recon[:, 0, :] = initial_guess[1][:, 0, :self.window_length]
 
         for i in range(aecg_sig.shape[1]):
             if i == 0:
@@ -192,8 +197,8 @@ class FECGMem(pl.LightningModule):
 
             self.add_to_memory(query, value)
 
-            fecg_recon[:,i,:] = guess[0][:,0,:self.window_length]
-            fecg_peak_recon[:,i,:] = guess[1][:, 0, :self.window_length]
+            fecg_peak_recon[:,i,:] = guess[0][:,0,:self.window_length]
+            fecg_recon[:,i,:] = guess[1][:, 0, :self.window_length]
 
         # TODO: abolish memory
         self.memory_initialized = False

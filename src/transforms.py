@@ -89,7 +89,7 @@ def remove_bad_keys(signal):
         signal.pop(key)
 
 class Resampler:
-    '''create additional class to store length and other parameters'''
+    '''re-scales (time-wise) by a random number between the boundary set by ratio'''
     def __init__(self, desired_length = 500, shape_index=1, ratio=(0.84, 1.16), offset=50):
         self.desired_length = desired_length
         self.shape_index = shape_index

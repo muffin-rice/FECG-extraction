@@ -34,6 +34,10 @@ class Encoder(nn.Module):
                 nn.Conv1d(input_channels, output_channels, kernel_size, stride),
             )
 
+    def freeze(self):
+        for param in self.parameters():
+            param.requires_grad = False
+
     def forward(self, aecg_sig, skips = None) -> [torch.Tensor]:
         '''returns encode_outs: [aecg, layer1, layer2, ..., encoded_layer]'''
         encode_outs = [aecg_sig]
@@ -91,6 +95,10 @@ class Decoder(nn.Module):
             nn.BatchNorm1d(1),
             activation,
         )
+
+    def freeze(self):
+        for param in self.parameters():
+            param.requires_grad = False
 
     def forward(self, inner_layer, skips = None) -> ([torch.Tensor], [torch.Tensor]):
         '''returns [heads] (num_heads) and
