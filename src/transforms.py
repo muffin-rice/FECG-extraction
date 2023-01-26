@@ -46,19 +46,12 @@ def calc_peak_mask(sig : np.array, peak_window = PEAK_SCALE, peak_sigma = PEAK_S
 
     for peak in peaks:
         peak = int(peak)
-        if peak >= 500:
+        if peak >= WINDOW_LENGTH*NUM_WINDOWS:
             break
         left, right = peak-int(peak_window/2), peak+int(peak_window/2)+1
         peak_mask[left : right] = gauss_kernel(peak_window, peak_sigma)[:len(peak_mask[left : right])]
 
         binary_peak_mask[peak] = 1
-
-        # if peak < binary_peak_window:
-        #     binary_peak_mask[0:peak+binary_peak_window]= 1
-        # elif peak + binary_peak_window >= binary_peak_mask.shape[0]:
-        #     binary_peak_mask[peak-binary_peak_window:] = 1
-        # else:
-        #     binary_peak_mask[peak-binary_peak_window:peak+binary_peak_window] = 1
 
     return peak_mask, binary_peak_mask
 
@@ -137,6 +130,7 @@ def get_signal_masks(signal):
 
 def split_signal_into_segments(signal):
     '''reshape signal into n_segments x segment for individual scaling'''
+
     signal['mecg_sig'] = signal['mecg_sig'].reshape(NUM_WINDOWS, WINDOW_LENGTH)
     signal['fecg_sig'] = signal['fecg_sig'].reshape(NUM_WINDOWS, WINDOW_LENGTH)
     signal['binary_fetal_mask'] = signal['binary_fetal_mask'].reshape(NUM_WINDOWS, WINDOW_LENGTH)

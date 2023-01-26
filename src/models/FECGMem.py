@@ -129,7 +129,8 @@ class FECGMem(pl.LightningModule):
         # return all the losses with hyperparameters defined earlier
         return self.loss_params['fp_bce'] * torch.sum(results['loss_fecg_mask_bce']) / self.batch_size + \
                self.loss_params['fecg'] * torch.sum(results['loss_fecg_mae']) / self.batch_size + \
-               self.loss_params['fp_bce'] * self.loss_params['fp_bce_class'] * torch.sum(results['loss_fecg_mask_masked_bce'])
+               self.loss_params['fp_bce'] * self.loss_params['fp_bce_class'] * \
+               torch.sum(results['loss_fecg_mask_masked_bce']) / self.batch_size
 
     def calculate_losses_into_dict(self, recon_fecg : torch.Tensor, gt_fecg : torch.Tensor, recon_binary_fetal_mask : torch.Tensor,
                                    gt_binary_fetal_mask : torch.Tensor) -> {str : torch.Tensor}:

@@ -1,13 +1,12 @@
 from copy import deepcopy as copy
 import numpy as np
 import torch
-# from ecgdetectors import Detectors
+from ecgdetectors import Detectors
 from math import pi, sqrt, exp
 from scipy.signal import savgol_filter, filtfilt, firwin, firwin2, resample
 from numpy.random import normal, uniform
 
-# DETECTOR = Detectors(125).two_average_detector
-
+DETECTOR = Detectors(125).pan_tompkins_detector
 
 def filt(signal: np.ndarray, numtaps=31, sampling_rate=125):
     '''removes the baseline + power line noise'''
@@ -131,8 +130,7 @@ def invert_stft_batch(stft_sig : torch.Tensor): #batch_size x 34 x 469
 
 def return_peaks(sig : np.array):
     # returns the indices of the R peaks of a 1D array (depends on the algorithm)
-    return [1,2,3,4,5]
-    # return DETECTOR(sig)
+    return DETECTOR(sig)
 
 def calc_peak_stats(orig_peaks : [int], pred_peaks : [int], window_size : int = 7):
     # returns the indices of the R peaks of a 1D array (depends on the algorithm)
