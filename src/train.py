@@ -116,7 +116,7 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                                             query_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                                             value_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                                             decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
-                                            key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH, train=True,
+                                            key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH,
                                             batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                                             window_length=WINDOW_LENGTH, pretrained_unet = None
                                             )
@@ -130,7 +130,7 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                    query_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                    value_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                    decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
-                   key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH, train=True,
+                   key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH,
                    batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE, window_length=WINDOW_LENGTH,
                    pretrained_unet=pretrained_unet)
 

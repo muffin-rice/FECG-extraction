@@ -79,7 +79,8 @@ class UNet(pl.LightningModule):
         # fecg_encode_outs : [fecg_sig (template), layer1, layer2, ..., layern, inner_layer]
         fecg_encode_outs = self.fecg_encode(aecg_sig, None)
 
-        (fecg_peak_recon, fecg_recon), _ = self.fecg_decode(fecg_encode_outs[-1], fecg_encode_outs)
+        # TODO: testing no skip
+        (fecg_peak_recon, fecg_recon), _ = self.fecg_decode(fecg_encode_outs[-1], None)
 
         return {'fecg_recon' : fecg_recon, 'fecg_mask_recon' : fecg_peak_recon}
 

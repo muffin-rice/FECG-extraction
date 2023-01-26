@@ -12,16 +12,16 @@ class FECGMem(pl.LightningModule):
     '''FECG with memory storage'''
     def __init__(self, sample_ecg, window_length, query_encoder_params : ((int,),), key_dim : int, val_dim : int,
                  value_encoder_params : ((int,),), decoder_params : ((int,),), memory_length : int,
-                 batch_size : int, learning_rate : float, loss_ratios : {str : int}, pretrained_unet : UNet,
-                 train=False,):
+                 batch_size : int, learning_rate : float, loss_ratios : {str : int}, pretrained_unet : UNet,):
         super().__init__()
         self.window_length = window_length
         if pretrained_unet is not None:
             self.value_encoder = pretrained_unet.fecg_encode
             self.value_decoder = pretrained_unet.fecg_decode
 
-            self.value_encoder.freeze()
-            self.value_decoder.freeze()
+            # TODO: freeze or not
+            # self.value_encoder.freeze()
+            # self.value_decoder.freeze()
 
             print('Using pretrained value encoder/decoder; training key_encoder')
         else:
@@ -37,86 +37,67 @@ class FECGMem(pl.LightningModule):
         self.memory_iteration = 0
         self.loss_params = loss_ratios
         self.learning_rate = learning_rate
-        self.is_training = train
 
         self.float()
 
-        # self.query_key_proj = KeyProjector(query_encoder_params[0][-1], key_dim)
+        # TODO: project the memory
+        self.query_key_proj = KeyProjector(query_encoder_params[0][-1], key_dim)
+        self.value_key_proj = KeyProjector(value_encoder_params[0][-1], val_dim)
+        self.value_unprojer = KeyProjector(val_dim, value_encoder_params[0][-1])
+
+        # self.attention_layer = nn.MultiheadAttention(embed_dim=self.key_dim, num_heads=4)
         # self.memory_key_proj
 
     def encode_value(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
         '''encodes the value, returns the encoded value with projection (if any) and the skips'''
         assert segment.shape[2] == self.window_length
-        encode_outs = self.value_encoder(segment)
-        # return self.query_key_proj(encode_outs[-1]), encode_outs
-        return encode_outs[-1], encode_outs
+        encoded_values = self.value_encoder(segment)
+        return encoded_values[-1], encoded_values
 
     def encode_query(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
         '''gets the encoded value given aecg segment'''
-
+        assert segment.shape[2] == self.window_length
         encoded_key = self.key_encoder(segment)
         return encoded_key[-1], encoded_key
 
     def decode_value(self, value : torch.Tensor, value_skips) -> torch.Tensor:
+        value = self.value_unprojer(value)
         initial_guess, _ = self.value_decoder(value, value_skips)
 
         return initial_guess
 
     def get_key_memory(self):
         '''create functions for training inplace behavior'''
-        if self.is_training:
-            return torch.stack(self.value_memory, dim=3).flatten(2, 3)
-        else:
-            return self.key_memory
+        return self.key_memory
 
     def get_value_memory(self):
         '''create functions for training inplace behavior'''
-        if self.is_training:
-            return torch.stack(self.value_memory, dim=3).flatten(2,3)
-        else:
-            return self.value_memory
+        return self.value_memory
 
-    def _initialize_memory(self, initial_key : torch.Tensor, initial_value : torch.Tensor):
+    def _initialize_memory(self, memory_key : torch.Tensor, memory_value : torch.Tensor):
         '''initializes the key and value memories
         memory has shape B x key_dim x memory_length * planes (features)'''
         assert self.memory_initialized is False
         # inputs are B x C x W
-        if self.is_training:
-            self.key_shape = (self.batch_size, initial_key.shape[1], self.memory_length * initial_key.shape[2])
-            self.value_shape = (self.batch_size, initial_value.shape[1], self.memory_length * initial_value.shape[2])
-            self.key_memory = []
-            self.value_memory = []
-        else:
-            self.key_memory = torch.zeros(
-                (self.batch_size, initial_key.shape[1], self.memory_length * initial_key.shape[2]))
-            self.value_memory = torch.zeros(
-                (self.batch_size, initial_value.shape[1], self.memory_length * initial_value.shape[2]))
+        self.key_memory = torch.zeros((self.batch_size, self.key_dim, self.memory_length * memory_key.shape[2]))
+        self.value_memory = torch.zeros((self.batch_size, self.val_dim, self.memory_length * memory_value.shape[2]))
 
         self.memory_initialized = True
         self.memory_iteration = 0
 
-        self.add_to_memory(initial_value, initial_key)
+        self.add_to_memory(memory_value, memory_key)
 
     def add_to_memory(self, memory_value : torch.Tensor, memory_key : torch.Tensor):
         '''adds value/key to memory'''
-        # TODO: avoid adding every iteration
+        # TODO: better way of adding to memory
         if self.memory_iteration < self.memory_length:
-            if self.is_training:
-                self.key_memory.append(memory_key)
-                self.value_memory.append(memory_value)
-            else:
-                self.key_memory[:, :, self.memory_iteration : self.memory_iteration+memory_key.shape[2]] = memory_key
-                self.value_memory[:, :, self.memory_iteration : self.memory_iteration+memory_value.shape[2]] = memory_value
+            self.key_memory[:, :, self.memory_iteration: self.memory_iteration + memory_key.shape[2]] = memory_key
+            self.value_memory[:, :, self.memory_iteration: self.memory_iteration + memory_value.shape[2]] = memory_value
         else:
             replace_i = self.memory_iteration % self.memory_length
 
-            if self.is_training:
-                self.key_memory[replace_i] = memory_key
-                self.value_memory[replace_i] = memory_value
-
-            else:
-                self.key_memory[:, :, replace_i : replace_i + memory_key.shape[2]] = memory_key
-                self.value_memory[:, :, replace_i : replace_i + memory_value.shape[2]] = memory_value
+            self.key_memory[:, :, replace_i: replace_i + memory_key.shape[2]] = memory_key
+            self.value_memory[:, :, replace_i: replace_i + memory_value.shape[2]] = memory_value
 
         self.memory_iteration += 1
 
@@ -125,6 +106,11 @@ class FECGMem(pl.LightningModule):
         affinity = self.softmax_affinity(self.compute_affinity(query))
         value_memory = self.get_value_memory()
         return torch.bmm(value_memory, affinity)
+        #
+        # value_memory = self.get_value_memory()
+        # atn = self.attention_layer.forward(query, value_memory, value_memory)
+        #
+        # return atn
 
     def softmax_affinity(self, affinity : torch.Tensor) -> torch.Tensor:
         '''softmaxes affinity matrix S across second dimension'''
@@ -147,7 +133,6 @@ class FECGMem(pl.LightningModule):
 
     def calculate_losses_into_dict(self, recon_fecg : torch.Tensor, gt_fecg : torch.Tensor, recon_binary_fetal_mask : torch.Tensor,
                                    gt_binary_fetal_mask : torch.Tensor) -> {str : torch.Tensor}:
-
         # If necessary: peak-weighted losses, class imablance in BCE loss
 
         fecg_loss_mae = calc_mse(recon_fecg, gt_fecg)
@@ -177,9 +162,12 @@ class FECGMem(pl.LightningModule):
         initial_value, initial_value_outs = self.encode_value(initial_aecg_segment)
         initial_query, _ = self.encode_query(initial_aecg_segment)
 
-        initial_guess = self.decode_value(initial_value, initial_value_outs)
+        value_proj = self.value_key_proj(initial_value)
+        query_proj = self.query_key_proj(initial_query)
+        self._initialize_memory(query_proj, value_proj)
 
-        self._initialize_memory(initial_query, initial_value)
+        memory_value = self.retrieve_memory_value(query_proj)
+        initial_guess = self.decode_value(memory_value, initial_value_outs)
 
         fecg_peak_recon[:,0,:] = initial_guess[0][:,0,:self.window_length]
         fecg_recon[:, 0, :] = initial_guess[1][:, 0, :self.window_length]
@@ -191,11 +179,14 @@ class FECGMem(pl.LightningModule):
             segment = aecg_sig[:,[i],:]
 
             query, _ = self.encode_query(segment)
-            memory_value = self.retrieve_memory_value(query)
             value, value_outs = self.encode_value(segment)
-            guess = self.decode_value(memory_value, value_outs)
 
-            self.add_to_memory(query, value)
+            value_proj = self.value_key_proj(value)
+            query_proj = self.query_key_proj(query)
+            self.add_to_memory(query_proj, value_proj)
+
+            memory_value = self.retrieve_memory_value(query_proj)
+            guess = self.decode_value(memory_value, value_outs)
 
             fecg_peak_recon[:,i,:] = guess[0][:,0,:self.window_length]
             fecg_recon[:,i,:] = guess[1][:, 0, :self.window_length]
@@ -205,6 +196,45 @@ class FECGMem(pl.LightningModule):
 
         return {'fecg_recon' : fecg_recon, 'fecg_mask_recon' : fecg_peak_recon}
 
+    def train_forward(self, aecg_sig: torch.Tensor):
+        '''same thing as forward but only outputs the last segment'''
+        # fecg_recon, fecg_peak_recon = torch.zeros_like(aecg_sig), torch.zeros_like(aecg_sig)
+
+        # get initial guess and initialize memory
+        initial_aecg_segment = aecg_sig[:, [0], :]
+        initial_value, initial_value_outs = self.encode_value(initial_aecg_segment)
+        initial_query, _ = self.encode_query(initial_aecg_segment)
+
+        value_proj = self.value_key_proj(initial_value)
+        query_proj = self.query_key_proj(initial_query)
+        self._initialize_memory(query_proj, value_proj)
+
+        for i in range(aecg_sig.shape[1]):
+            if i == 0:
+                continue
+
+            segment = aecg_sig[:, [i], :]
+
+            query, _ = self.encode_query(segment)
+            value, value_outs = self.encode_value(segment)
+
+            value_proj = self.value_key_proj(value)
+            query_proj = self.query_key_proj(query)
+            self.add_to_memory(query_proj, value_proj)
+
+            if i == aecg_sig.shape[1] - 1:
+                memory_value = self.retrieve_memory_value(query_proj)
+                guess = self.decode_value(memory_value, value_outs)
+
+                fecg_peak_recon = guess[0][:, 0, :self.window_length]
+                fecg_recon = guess[1][:,0,:self.window_length]
+
+
+        # TODO: abolish memory
+        self.memory_initialized = False
+
+        return {'fecg_recon': fecg_recon, 'fecg_mask_recon': fecg_peak_recon}
+
     def convert_to_float(self, d : {}):
         # TODO: make better solution
         for k, v in d.items():
@@ -212,18 +242,22 @@ class FECGMem(pl.LightningModule):
                 d[k] = v.float()
 
     def training_step(self, d: {}, batch_idx):
+        self.is_training = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
-        model_output = self.forward(aecg_sig)
+        # performs backwards on the last segment only to avoid inplace operations with the masking
 
-        loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'],
-                                                    model_output['fecg_mask_recon'], d['binary_fetal_mask'])
+        model_output = self.train_forward(aecg_sig)
+
+        loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'][:,-1,:],
+                                                    model_output['fecg_mask_recon'], d['binary_fetal_mask'][:,-1,:])
 
         self.log_dict({f'train_{k}': v for k, v in loss_dict.items()}, sync_dist=True, batch_size=self.batch_size)
 
         return loss_dict['total_loss']
 
     def validation_step(self, d : {}, batch_idx):
+        self.is_training = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
         model_output = self.forward(aecg_sig)
@@ -234,9 +268,10 @@ class FECGMem(pl.LightningModule):
         self.log_dict({f'val_{k}': v for k, v in loss_dict.items()}, sync_dist=True, batch_size=self.batch_size)
         model_output.update(loss_dict)
 
-        return loss_dict['total_loss']
+        return model_output
 
     def test_step(self, d : {}, batch_idx):
+        self.is_training = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
         model_output = self.forward(aecg_sig)
@@ -246,7 +281,7 @@ class FECGMem(pl.LightningModule):
 
         model_output.update(loss_dict)
 
-        return loss_dict['total_loss']
+        return model_output
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)

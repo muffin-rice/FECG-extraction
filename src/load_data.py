@@ -268,7 +268,7 @@ class ECGDataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             shuffle=False,
-            drop_last=True
+            drop_last=DROP_LAST
         )
 
 

@@ -60,6 +60,8 @@ parser.add_argument('--noise', type=float, default=0.0,
                     help='random uniform noise to add to data in noise param')
 parser.add_argument('--numtaps', type=int, default=31,
                     help='numtaps for MECG filtering')
+parser.add_argument('--drop_last', type=bool, default=True,
+                    help='droplast for dataloader')
 
 # train arguments
 parser.add_argument('--trainer_workers', type=int, default=1,
@@ -129,7 +131,7 @@ FECG_BCE_CLASS_RATIO = 1
 MECG_RATIO = 1 # mecg recon
 
 # data
-DROP_LAST = False
+DROP_LAST = args.drop_last
 MF_RATIO = 4
 MF_RATIO_STD = 0.5
 LOAD_TYPE = args.load_type

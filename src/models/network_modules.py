@@ -110,7 +110,10 @@ class Decoder(nn.Module):
         decode_outs = [encode_outs[-1]]
         for i, layer in enumerate(self.decode_layers):
             decoder_output = layer(decode_outs[-1])
-            decode_outs.append(self.make_skip_connection(-decoder_output, skips[-i - 2]))
+            if skips is not None:
+                decode_outs.append(self.make_skip_connection(-decoder_output, skips[-i - 2]))
+            else:
+                decode_outs.append(decoder_output)
 
         heads = []
         for layer in self.heads:
