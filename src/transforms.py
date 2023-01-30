@@ -8,14 +8,24 @@ from scipy.signal import filtfilt, butter
 from torchaudio.functional import bandpass_biquad
 from torch import from_numpy
 
+# TODO: be able to specify keys to transform and put every transform in a class
+
 def transform_keys(signal_dict):
     signal_dict['fecg_sig'] = signal_dict['fecg_clean']
     signal_dict['mecg_sig'] = signal_dict['mecg_clean']
     signal_dict['fecg_peaks'] = signal_dict['fecg_peaks'][0].astype(int)
     signal_dict['noise'] = signal_dict['mecg_signal'] - signal_dict['mecg_clean']
 
-def downsample_fecg(signal):
-    signal['fecg_sig'] = ss.resample(signal['fecg_sig'][0,:], int(signal['fecg_sig'].shape[1]/2))[np.newaxis,:]
+# class Downsampler:
+#     def __init__(self, downsample_rate=2):
+#         self.downsample_rate = downsample_rate
+#
+#     def downsample_fecg(self, signal):
+#         signal['fecg_sig'] =
+
+
+def downsample_fecg(signal, rate = 2):
+    signal['fecg_sig'] = ss.resample(signal['fecg_sig'][0,:], signal['fecg_sig'].shape[1]//rate)[np.newaxis,:]
 
 class Filterer:
     def __init__(self, fs = 125, lowcut = 1, highcut = 55, order=3):
@@ -81,6 +91,12 @@ def remove_bad_keys(signal):
     for key in get_bad_keys(signal):
         signal.pop(key)
 
+def duplicate_keys(signal):
+    signal['maternal_mask'] = np.zeros_like(signal['fecg_sig'])
+    signal['binary_maternal_mask'] = np.zeros_like(signal['fecg_sig'])
+    signal['fetal_mask'] = np.zeros_like(signal['fecg_sig'])
+    signal['binary_fetal_mask'] = np.zeros_like(signal['fecg_sig'])
+
 class Resampler:
     '''re-scales (time-wise) by a random number between the boundary set by ratio'''
     def __init__(self, desired_length = 500, shape_index=1, ratio=(0.84, 1.16), offset=50):
@@ -91,7 +107,22 @@ class Resampler:
 
     def perform_initial_trim(self, signal):
         '''trim if necessary to reduce computational load on resampling'''
-        trim_length = int(self.desired_length * 1.5+self.offset)
+        trim_length = int(self.desired_length * 1.5 + self.offset)
+        if signal['mecg_sig'].shape[self.shape_index] < trim_length:
+            return
+
+        # TODO: change if statement handling
+        if self.shape_index == 1:
+            signal['mecg_sig'] = signal['mecg_sig'][:,self.offset:trim_length]
+            signal['fecg_sig'] = signal['fecg_sig'][:,self.offset:trim_length]
+            signal['noise'] = signal['noise'][:,self.offset:trim_length]
+            signal['fecg_peaks'] = signal['fecg_peaks'][(signal['fecg_peaks'] < trim_length) &
+                                                        (self.offset < signal['fecg_peaks'])].astype(int) - self.offset
+        else:
+            raise NotImplementedError
+
+    def perform_strict_trim(self, signal):
+        trim_length = int(self.desired_length + self.offset)
         if signal['mecg_sig'].shape[self.shape_index] < trim_length:
             return
 
@@ -154,6 +185,12 @@ def check_nans(segment):
 def add_noise_signal(signal):
     '''adds a gaussian noise (random) '''
     signal['noise'] += generate_gaussian_noise_by_shape(shape=signal['fecg_sig'].shape, stdev=NOISE).numpy()
+
+
+def scale_temp(signal):
+    # TODO:
+    signal['fecg_sig'], signal['mecg_sig'] = signal['mecg_sig'] / 2, signal['mecg_sig'] / 2
+    scale_multiple_segments(signal)
 
 
 def scale_segment(segment, mf_ratio=None):

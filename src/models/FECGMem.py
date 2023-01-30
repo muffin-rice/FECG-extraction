@@ -23,7 +23,7 @@ class FECGMem(pl.LightningModule):
             # self.value_encoder.freeze()
             # self.value_decoder.freeze()
 
-            print('Using pretrained value encoder/decoder; training key_encoder')
+            print('Using pretrained value encoder/decoder')
         else:
             self.value_decoder = Decoder(decoder_params, head_params=('sigmoid', 'tanh'))
             self.value_encoder = Encoder(value_encoder_params)
@@ -45,7 +45,7 @@ class FECGMem(pl.LightningModule):
         self.value_key_proj = KeyProjector(value_encoder_params[0][-1], val_dim)
         self.value_unprojer = KeyProjector(val_dim, value_encoder_params[0][-1])
 
-        # self.attention_layer = nn.MultiheadAttention(embed_dim=self.key_dim, num_heads=4)
+        self.attention_layer = nn.MultiheadAttention(embed_dim=self.key_dim, num_heads=4, batch_first=True)
         # self.memory_key_proj
 
     def encode_value(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
@@ -55,7 +55,7 @@ class FECGMem(pl.LightningModule):
         return encoded_values[-1], encoded_values
 
     def encode_query(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
-        '''gets the encoded value given aecg segment'''
+        '''gets the encoded key given aecg segment'''
         assert segment.shape[2] == self.window_length
         encoded_key = self.key_encoder(segment)
         return encoded_key[-1], encoded_key
@@ -103,14 +103,14 @@ class FECGMem(pl.LightningModule):
 
     def retrieve_memory_value(self, query : torch.Tensor) -> torch.Tensor:
         '''retrieves the value in memory using affinity'''
-        affinity = self.softmax_affinity(self.compute_affinity(query))
-        value_memory = self.get_value_memory()
-        return torch.bmm(value_memory, affinity)
-        #
+        # affinity = self.softmax_affinity(self.compute_affinity(query))
         # value_memory = self.get_value_memory()
-        # atn = self.attention_layer.forward(query, value_memory, value_memory)
+        # return torch.bmm(value_memory, affinity)
         #
-        # return atn
+        value_memory = self.get_value_memory()
+        atn = self.attention_layer.forward(query.transpose(1,2), value_memory.transpose(1,2), value_memory.transpose(1,2))
+
+        return atn[0].transpose(1,2)
 
     def softmax_affinity(self, affinity : torch.Tensor) -> torch.Tensor:
         '''softmaxes affinity matrix S across second dimension'''
@@ -244,6 +244,7 @@ class FECGMem(pl.LightningModule):
 
     def training_step(self, d: {}, batch_idx):
         self.is_training = False
+        self.memory_initialized = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
         # performs backwards on the last segment only to avoid inplace operations with the masking
@@ -259,6 +260,7 @@ class FECGMem(pl.LightningModule):
 
     def validation_step(self, d : {}, batch_idx):
         self.is_training = False
+        self.memory_initialized = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
         model_output = self.forward(aecg_sig)
@@ -273,6 +275,7 @@ class FECGMem(pl.LightningModule):
 
     def test_step(self, d : {}, batch_idx):
         self.is_training = False
+        self.memory_initialized = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
         model_output = self.forward(aecg_sig)
@@ -290,5 +293,5 @@ class FECGMem(pl.LightningModule):
 
     def print_summary(self, depth = 7):
         from torchinfo import summary
-        random_input = torch.rand((2, 1, 250))
+        random_input = torch.rand((self.batch_size, 1, 250))
         return summary(self, input_data=random_input, depth=depth)

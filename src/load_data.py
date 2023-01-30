@@ -5,8 +5,8 @@ from numpy.random import uniform
 import torch
 from pytorch_lightning import LightningDataModule
 from hyperparams import *
-from wfdb.processing import correct_peaks
 from transforms import *
+from wfdb.io import rdrecord
 
 def load_data(data_dir: str) -> np.array:
     dataset = []
@@ -41,6 +41,11 @@ class ECGDataset(Dataset):
         if self.load_type == 'ss':
             self.create_ss_dataset()
 
+        elif split == 'competition':
+            print('creating comp set')
+            self.create_competition_dataset()
+            self.load_type = 'competition'
+
         elif self.load_type == 'whole':
             self.create_whole_dataset()
 
@@ -48,10 +53,10 @@ class ECGDataset(Dataset):
 
 
     def __len__(self):
-        if self.load_type in ('whole', 'normal'):
-            return len(self.dataset)
+        if self.load_type == 'ss':
+            return len(self.dataset) // 4
         else:
-            return len(self.dataset)//4
+            return len(self.dataset)
 
     def create_whole_dataset(self):
         '''dataset built on indices; load separately and then map later'''
@@ -69,6 +74,11 @@ class ECGDataset(Dataset):
         self.mecg_index_list, self.fecg_index_list = list(range(1, num_mecg + 1)), list(range(1, num_fecg + 1))
         self.mecg_rand_index_list, self.fecg_rand_index_list = list(range(NUM_MECG_RANDS)), list(range(NUM_FECG_RANDS))
 
+    def create_competition_dataset(self):
+        # TODO: remove hardcoding of data path
+        self.dataset = [i for i in range(1, 76)]
+        self.dataset.remove(10)
+
     def num_mecg_fecg(self, fnames : [str]):
         max_mecg, max_fecg = 0, 0
         for fname in fnames:
@@ -82,6 +92,17 @@ class ECGDataset(Dataset):
         transforms = []
 
         transforms.append(remove_bad_keys)
+
+        if self.load_type == 'competition':
+            filterer = Filterer()
+            transforms.append(filterer.perform_filter)
+            resampler = Resampler(desired_length=WINDOW_LENGTH * NUM_WINDOWS, shape_index=1, ratio = self.ratio)
+            transforms.append(resampler.perform_strict_trim)
+            transforms.append(duplicate_keys)
+            transforms.append(check_nans)
+            transforms.append(split_signal_into_segments)
+            transforms.append(scale_temp)
+            return transforms
 
         if self.load_type == 'new':
             transforms.append(transform_keys)
@@ -188,6 +209,33 @@ class ECGDataset(Dataset):
 
         return signal
 
+    def load_competition_item(self, idx):
+        fname = self.dataset[idx]
+        channel = COMPETITION_CHANNELS[idx]
+
+        sig = rdrecord(f'Data/competition/set-a/a{fname:02}').p_signal[:, channel][np.newaxis, ...]
+        with open(f'Data/competition/set-a-text/a{fname:02}.fqrs.txt', 'r') as f:
+            peaks = np.array(f.read().split('\n')[:-1], dtype=np.int32)
+
+        signal = {}
+        signal['mecg_sig'] = ss.decimate(sig, 8, axis=-1)
+        signal['fecg_peaks'] = peaks / 8
+        signal['fecg_sig'] = np.zeros_like(signal['mecg_sig'])
+        signal['noise'] = np.zeros_like(signal['mecg_sig'])
+
+        for transform in self.transforms:
+            if np.isnan(signal['mecg_sig']).any():
+                print(idx)
+            transform(signal)
+
+        arr_copies = {k : v.copy() for k, v in signal.items() if 'array' in str(type(v))}
+
+        signal.update(arr_copies)
+
+        signal.pop('fecg_peaks')
+
+        return signal
+
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
@@ -200,6 +248,10 @@ class ECGDataset(Dataset):
 
         elif self.load_type == 'whole':
             return self.load_indexpair_item(self.dataset[idx])
+
+        elif self.load_type == 'competition':
+            return self.load_competition_item(idx)
+
 
 class ECGDataModule(LightningDataModule):
     def __init__(self, data_dir: str, window_size, dataset_type: str = None, batch_size: int = BATCH_SIZE,
@@ -260,6 +312,24 @@ class ECGDataModule(LightningDataModule):
             load_type=self.load_type,
             numtaps=self.num_taps,
             split='test'
+        )
+
+        return DataLoader(
+            data,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
+            shuffle=False,
+            drop_last=DROP_LAST
+        )
+
+    def competition_dataloader(self):
+        data = ECGDataset(
+            data_dir = self.data_dir,
+            window_size=self.window_size,
+            load_type=self.load_type,
+            numtaps=self.num_taps,
+            split='competition'
         )
 
         return DataLoader(

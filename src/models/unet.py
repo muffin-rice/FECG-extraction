@@ -124,5 +124,5 @@ class UNet(pl.LightningModule):
 
     def print_summary(self):
         from torchinfo import summary
-        random_input = torch.rand((2, 1, 500))
+        random_input = torch.rand((self.batch_size, 1, 500))
         return summary(self, input_data=random_input, depth=7)

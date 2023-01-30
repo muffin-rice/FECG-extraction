@@ -169,7 +169,8 @@ def main(**kwargs):
                      accelerator=DEVICE,
                      devices=NUM_TRAINER_WORKERS,
                      max_epochs=NUM_EPOCHS,
-                     auto_lr_find=True)
+                     auto_lr_find=True,
+                     profiler='pytorch',)
 
     print(f"======= Training {MODEL_NAME} =======")
     if MODEL_VER:
