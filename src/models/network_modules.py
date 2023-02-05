@@ -51,10 +51,11 @@ class Encoder(nn.Module):
         return encode_outs
 
 class Decoder(nn.Module):
-    def __init__(self, up_params : ((int,),), head_params : (str,), decoder_skip : bool = True, signal_length = 500):
+    def __init__(self, up_params : ((int,),), head_params : (str,), signal_length = 500, skips : bool = True):
         super().__init__()
         self.leaky = nn.LeakyReLU(negative_slope=0.1)
         self.signal_length = signal_length
+        self.skips = skips
 
         self.decode_layers = nn.ParameterList()
         for i in range(len(up_params[0]) - 2):
@@ -103,6 +104,8 @@ class Decoder(nn.Module):
     def forward(self, inner_layer, skips = None) -> ([torch.Tensor], [torch.Tensor]):
         '''returns [heads] (num_heads) and
         decode_outs: [encoded_layer, layern, ..., layer1]'''
+        if not self.skips:
+            self.skips = None
         # skips are in the format of [input, layer1, layer2, ..., inner_layer]
         encode_outs = [inner_layer]
 

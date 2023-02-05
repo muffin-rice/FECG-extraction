@@ -46,16 +46,6 @@ class NoiseLoop(Loop):
 
     def noise_step(self):
         return
-        # self.steps += 1
-        # if self.steps == self.STEP_THRESHOLD:
-        #     self.steps = 0
-        # else:
-        #     return
-        # global NOISE_STD
-        # NOISE_STD += 0.0004
-        # if NOISE_STD == 0.0012:
-        #     quit()
-
 
     def advance(self, *args, **kwargs):
         batch = next(self.dataloader)
@@ -81,13 +71,15 @@ def make_unet(path : str = ''):
                                          sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
                                          fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                                          fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
-                                         batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE
+                                         batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
+                                         decoder_skips=SKIP,
                                          )
 
     return UNet(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
                 fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                 fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
-                batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE)
+                batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
+                decoder_skips=SKIP,)
 
 def make_wnet(path : str = ''):
     print('=====Making WNet Model=====')
@@ -98,7 +90,7 @@ def make_wnet(path : str = ''):
                                          fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                                          mecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                                          mecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
-                                         batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE
+                                         batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                                          )
 
     return WNet(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
@@ -106,7 +98,7 @@ def make_wnet(path : str = ''):
                 fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                 mecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                 mecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
-                batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE)
+                batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,)
 
 def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
     print('=====Making FECGMem Model=====')
@@ -118,7 +110,8 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                                             decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                                             key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH,
                                             batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
-                                            window_length=WINDOW_LENGTH, pretrained_unet = None
+                                            window_length=WINDOW_LENGTH, pretrained_unet = None,
+                                            decoder_skip=SKIP,
                                             )
 
     if unet_path:
@@ -132,7 +125,7 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                    decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                    key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH,
                    batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE, window_length=WINDOW_LENGTH,
-                   pretrained_unet=pretrained_unet)
+                   pretrained_unet=pretrained_unet, decoder_skips=SKIP)
 
 def main(**kwargs):
     tb_logger = TensorBoardLogger(save_dir=LOG_DIR, name=MODEL_NAME)

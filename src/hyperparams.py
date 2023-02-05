@@ -28,6 +28,8 @@ parser.add_argument('--memory_length', type=int, default=20,
                     help='size of memory in model')
 parser.add_argument('--pretrained_unet', type=str, default='',
                     help='pretrained unet value encoder/decoder ckpt (blank if train from scratch)')
+parser.add_argument('--skips', type=bool, default=False,
+                    help='skips to use in decoder')
 
 # sys arguments
 parser.add_argument('--model_name', type=str, default='unet_v1',
@@ -114,7 +116,7 @@ assert len(UP_PLANES) == len(DOWN_PLANES)
 START_CHANNELS = 1
 END_CHANNELS = 3
 RECON_SIG = 'gt_fecg' # signal to reconstruct
-SKIP = True
+SKIP = args.skips
 # attention hyperparameters
 EMBED_DIM = 166
 ATTENTION = False

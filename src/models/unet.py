@@ -6,7 +6,7 @@ from .losses import *
 
 class UNet(pl.LightningModule):
     def __init__(self, sample_ecg : torch.Tensor, learning_rate : float, fecg_down_params : ((int,),),
-                 fecg_up_params : ((int,),), loss_ratios : {str : int}, batch_size : int):
+                 fecg_up_params : ((int,),), loss_ratios : {str : int}, batch_size : int, decoder_skips : bool):
         # params in the format ((num_planes), (kernel_width), (stride))
         super().__init__()
 
@@ -15,17 +15,13 @@ class UNet(pl.LightningModule):
 
         self.fecg_encode = Encoder(fecg_down_params)
 
-        self.fecg_decode = Decoder(fecg_up_params, ('sigmoid', 'tanh'))
+        self.fecg_decode = Decoder(fecg_up_params, ('sigmoid', 'tanh'), skips=decoder_skips)
 
         self.loss_params, self.batch_size = loss_ratios, batch_size
 
         self.leaky = nn.LeakyReLU(negative_slope=0.1)
         # change dtype
         self.float()
-
-    def make_skip_connection(self, a, b):
-        b_shape = b.shape
-        return self.leaky(a[:b_shape[0], :b_shape[1], :b_shape[2]]+b)
 
     def loss_function(self, results):
         # return all the losses with hyperparameters defined earlier

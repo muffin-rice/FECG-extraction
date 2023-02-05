@@ -12,7 +12,8 @@ class FECGMem(pl.LightningModule):
     '''FECG with memory storage'''
     def __init__(self, sample_ecg, window_length, query_encoder_params : ((int,),), key_dim : int, val_dim : int,
                  value_encoder_params : ((int,),), decoder_params : ((int,),), memory_length : int,
-                 batch_size : int, learning_rate : float, loss_ratios : {str : int}, pretrained_unet : UNet,):
+                 batch_size : int, learning_rate : float, loss_ratios : {str : int}, pretrained_unet : UNet,
+                 decoder_skips : bool):
         super().__init__()
         self.window_length = window_length
         if pretrained_unet is not None:
@@ -25,7 +26,7 @@ class FECGMem(pl.LightningModule):
 
             print('Using pretrained value encoder/decoder')
         else:
-            self.value_decoder = Decoder(decoder_params, head_params=('sigmoid', 'tanh'))
+            self.value_decoder = Decoder(decoder_params, head_params=('sigmoid', 'tanh'), skips=decoder_skips)
             self.value_encoder = Encoder(value_encoder_params)
 
         self.key_encoder = Encoder(query_encoder_params)
