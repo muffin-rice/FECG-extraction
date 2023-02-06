@@ -139,3 +139,27 @@ class KeyProjector(nn.Module):
     def forward(self, x):
         # TODO: shrinkage and selection
         return self.key_proj(x)
+
+class PeakHead(nn.Module):
+    def __init__(self, starting_planes : int, ending_planes : int, hidden_layers : (int,), output_length : int):
+        super().__init__()
+
+        if ending_planes:
+            self.initial_conv = nn.Conv1d(starting_planes, ending_planes, kernel_size=3, padding=1)
+
+        self.flatten = nn.Flatten()
+        linears = [nn.LeakyReLU(negative_slope=0.1)]
+
+        for i in range(len(hidden_layers) - 1):
+            linears.append(nn.Linear(hidden_layers[i], hidden_layers[i+1]))
+            linears.append(nn.LeakyReLU(negative_slope=0.1))
+
+        linears.append(nn.Linear(hidden_layers[-1], output_length))
+        linears.append(nn.Sigmoid())
+
+        self.linears = nn.Sequential(*linears)
+
+    def forward(self, x):
+        x = self.initial_conv(x)
+        x = self.flatten(x)
+        return self.linears(x)

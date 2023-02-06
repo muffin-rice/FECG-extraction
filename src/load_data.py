@@ -89,46 +89,46 @@ class ECGDataset(Dataset):
         return max_mecg - 1, max_fecg - 1
 
     def create_transforms(self):
-        transforms = []
+        transforms = Transforms()
 
-        transforms.append(remove_bad_keys)
+        transforms.add_transform('remove_bad_keys', None)
 
         if self.load_type == 'competition':
-            filterer = Filterer()
-            transforms.append(filterer.perform_filter)
-            resampler = Resampler(desired_length=WINDOW_LENGTH * NUM_WINDOWS, shape_index=1, ratio = self.ratio)
-            transforms.append(resampler.perform_strict_trim)
-            transforms.append(duplicate_keys)
-            transforms.append(check_nans)
-            transforms.append(split_signal_into_segments)
-            transforms.append(scale_temp)
+            transforms.add_transform('filter', ('mecg_sig', 125, 1, 55, 3))
+            desired_length = WINDOW_LENGTH * NUM_WINDOWS
+            transforms.add_transform('perform_trim', (desired_length, 0, 'mecg_sig', 'fecg_sig'))
+            transforms.add_transform('trim_peaks', (desired_length, 0))
+            transforms.add_transform('duplicate_keys', ('mecg_sig', 'binary_maternal_mask', 'binary_fetal_mask'))
+            transforms.add_transform('check_nans', ('mecg_sig', 'fecg_sig'))
+            transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask',
+                                                      'binary_maternal_mask',))
+            return transforms
+
+        if self.load_type == 'whole':
+            transforms.add_transform('downsample', ('fecg_sig', 2))
+            transforms.add_transform('filter', ('mecg_sig', 125, 1, 55, 3))
+            desired_length = WINDOW_LENGTH * NUM_WINDOWS
+            desired_length_trim = int(WINDOW_LENGTH * NUM_WINDOWS * 1.5)
+            transforms.add_transform('perform_trim', (desired_length_trim, 50, 'mecg_sig', 'fecg_sig', 'noise'))
+            transforms.add_transform('trim_peaks', (desired_length_trim, 50))
+            transforms.add_transform('resample', ('mecg_sig', None, None, desired_length, COMPRESS_RATIO))
+            transforms.add_transform('resample', ('fecg_sig', 'noise', 'fecg_peaks', desired_length, COMPRESS_RATIO))
+            transforms.add_transform('get_signal_masks', ('fetal_mask', 'binary_fetal_mask', 'fecg_sig', 'fecg_peaks'))
+            transforms.add_transform('get_signal_masks', ('maternal_mask', 'binary_maternal_mask', 'mecg_sig', None))
+            transforms.add_transform('pop_keys', ('maternal_mask', 'fetal_mask'))
+            transforms.add_transform('check_signal_shape', ('fecg_sig', 'mecg_sig'))
+            transforms.add_transform('check_nans', ('fecg_sig', 'mecg_sig', 'fecg_peaks', 'binary_maternal_mask',
+                                                     'binary_fetal_mask'))
+            # transforms.add_transform('print_keys', ('fecg_sig', 'mecg_sig', 'binary_fetal_mask', 'noise'))
+            transforms.add_transform('add_noise_signal', ('noise', 'fecg_sig'))
+            transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask', 'binary_maternal_mask', 'noise'))
+            transforms.add_transform('reshape_peaks', ('fecg_peaks',))
+            # transforms.add_transform('print_keys', ('noise', 'fecg_peaks'))
+            transforms.add_transform('scale_multiple_segments', None)
             return transforms
 
         if self.load_type == 'new':
-            transforms.append(transform_keys)
-
-        if self.load_type == 'whole': # resmaple with different parameters
-            transforms.append(downsample_fecg)
-            filterer = Filterer()
-            transforms.append(filterer.perform_filter)
-            resampler = Resampler(desired_length=WINDOW_LENGTH * NUM_WINDOWS, shape_index=1, ratio=self.ratio)
-            transforms.append(resampler.perform_initial_trim)
-            transforms.append(resampler.resample_signal)
-
-        else:
-            resampler = Resampler()
-            transforms.append(resampler.resample_signal)
-
-        transforms.append(get_signal_masks)
-        transforms.append(check_signal_shapes)
-        transforms.append(check_nans)
-        transforms.append(add_noise_signal)
-
-        if self.load_type == 'whole':
-            transforms.append(split_signal_into_segments)
-            transforms.append(scale_multiple_segments)
-        else:
-            transforms.append(scale_segment)
+            transforms.add_transform('transform_keys', None)
 
         return transforms
 
@@ -144,11 +144,9 @@ class ECGDataset(Dataset):
             print(f'{fname} not found')
             raise FileNotFoundError
 
-        for transform in self.transforms:
-            transform(inp)
+        self.transforms.perform_transforms(inp)
 
         inp['fname'] = fname
-        inp.pop('fecg_peaks') # peaks are in binary_fetal_mask instead (stackable)
 
         return inp
 
@@ -201,11 +199,9 @@ class ECGDataset(Dataset):
         signal['fecg_peaks'] = fecg['fecg_peaks'].astype(int)
         signal['noise'] = fecg['fecg_sig'] - fecg['gt_fecg_sig']
 
-        for transform in self.transforms:
-            transform(signal)
+        self.transforms.perform_transforms(signal)
 
         signal['fname'] = (fecg_fname, mecg_fname)
-        signal.pop('fecg_peaks')  # peaks are in binary_fetal_mask instead (stackable)
 
         return signal
 
@@ -223,16 +219,11 @@ class ECGDataset(Dataset):
         signal['fecg_sig'] = np.zeros_like(signal['mecg_sig'])
         signal['noise'] = np.zeros_like(signal['mecg_sig'])
 
-        for transform in self.transforms:
-            if np.isnan(signal['mecg_sig']).any():
-                print(idx)
-            transform(signal)
+        self.transforms.perform_transforms(signal)
 
         arr_copies = {k : v.copy() for k, v in signal.items() if 'array' in str(type(v))}
 
         signal.update(arr_copies)
-
-        signal.pop('fecg_peaks')
 
         return signal
 

@@ -30,6 +30,10 @@ parser.add_argument('--pretrained_unet', type=str, default='',
                     help='pretrained unet value encoder/decoder ckpt (blank if train from scratch)')
 parser.add_argument('--skips', type=bool, default=False,
                     help='skips to use in decoder')
+parser.add_argument('--initial_conv', type=int, default=2,
+                    help='number of planes in initial conv for peak index pred')
+parser.add_argument('--linear_layers', type=int, default=(108, 128), nargs='+',
+                    help='tuple of linear layers for the peak index pred')
 
 # sys arguments
 parser.add_argument('--model_name', type=str, default='unet_v1',
@@ -64,6 +68,8 @@ parser.add_argument('--numtaps', type=int, default=31,
                     help='numtaps for MECG filtering')
 parser.add_argument('--drop_last', type=bool, default=True,
                     help='droplast for dataloader')
+parser.add_argument('--peak_padding', type=int, default=10,
+                    help='length to pad peak array')
 
 # train arguments
 parser.add_argument('--trainer_workers', type=int, default=1,
@@ -117,6 +123,8 @@ START_CHANNELS = 1
 END_CHANNELS = 3
 RECON_SIG = 'gt_fecg' # signal to reconstruct
 SKIP = args.skips
+INITIAL_CONV_PLANES = args.initial_conv
+LINEAR_LAYERS = tuple(args.linear_layers)
 # attention hyperparameters
 EMBED_DIM = 166
 ATTENTION = False
@@ -131,6 +139,7 @@ FECG_RATIO = 20 # fecg recon
 FECG_BCE_RATIO = 1 # fecg bce peak mask
 FECG_BCE_CLASS_RATIO = 1
 MECG_RATIO = 1 # mecg recon
+FECG_PEAK_LOSS_RATIO = 1
 
 # data
 DROP_LAST = args.drop_last
@@ -147,5 +156,6 @@ BINARY_PEAK_WINDOW = 0 # +-2 marked as 1
 COMPRESS_RATIO = (0.84,1.16)
 PEAK_SCALE = 1
 PEAK_SIGMA = 1
+PAD_LENGTH = args.peak_padding
 import numpy as np
 COMPETITION_CHANNELS = np.array([1,1,1,1,1,1,4,1,1,4,2,1,2,1,1,1,3,1,2,3,1,1,2,2,2,2,1,2,1,3,1,1,3,1,3,1,1,1,1,1,1,1,1,1,1,1,2,1,2,4,4,2,1,1,1,1,1,1,1,4,1,1,1,1,1,1,2,1,2,1,4,1,2,1,1]) - 1

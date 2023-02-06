@@ -58,10 +58,9 @@ class NoiseLoop(Loop):
 
 def get_loss_param_dict():
     return {
-        'fp_bce' : FECG_BCE_RATIO,
         'fecg' : FECG_RATIO,
         'mecg' : MECG_RATIO,
-        'fp_bce_class' : FECG_BCE_CLASS_RATIO-1
+        'fecg_peak' : FECG_PEAK_LOSS_RATIO,
     }
 
 def make_unet(path : str = ''):
@@ -72,14 +71,16 @@ def make_unet(path : str = ''):
                                          fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                                          fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                                          batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
-                                         decoder_skips=SKIP,
+                                         decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
+                                         linear_layers=LINEAR_LAYERS, pad_length=PAD_LENGTH,
                                          )
 
     return UNet(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
                 fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                 fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                 batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
-                decoder_skips=SKIP,)
+                decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
+                linear_layers=LINEAR_LAYERS, pad_length=PAD_LENGTH,)
 
 def make_wnet(path : str = ''):
     print('=====Making WNet Model=====')
