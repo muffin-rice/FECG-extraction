@@ -155,7 +155,7 @@ class PeakHead(nn.Module):
             linears.append(nn.LeakyReLU(negative_slope=0.1))
 
         linears.append(nn.Linear(hidden_layers[-1], output_length))
-        linears.append(nn.Sigmoid())
+        linears.append(nn.ReLU())
 
         self.linears = nn.Sequential(*linears)
 

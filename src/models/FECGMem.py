@@ -269,7 +269,7 @@ class FECGMem(pl.LightningModule):
         model_output = self.forward(aecg_sig, peak_shape=d['fecg_peaks'].shape)
 
         loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'],
-                                                    model_output['fecg_peak_recon'], d['fecg_peaks'])
+                                                    model_output['fecg_peak_recon'], d['fecg_peaks'][:,0,:])
 
         self.log_dict({f'val_{k}': v for k, v in loss_dict.items()}, sync_dist=True, batch_size=self.batch_size)
         model_output.update(loss_dict)
@@ -284,7 +284,7 @@ class FECGMem(pl.LightningModule):
         model_output = self.forward(aecg_sig, peak_shape=d['fecg_peaks'].shape)
 
         loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'],
-                                                    model_output['fecg_peak_recon'], d['fecg_peaks'])
+                                                    model_output['fecg_peak_recon'], d['fecg_peaks'][:,0,:])
 
         model_output.update(loss_dict)
 

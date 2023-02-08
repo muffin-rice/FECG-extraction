@@ -139,7 +139,7 @@ FECG_RATIO = 20 # fecg recon
 FECG_BCE_RATIO = 1 # fecg bce peak mask
 FECG_BCE_CLASS_RATIO = 1
 MECG_RATIO = 1 # mecg recon
-FECG_PEAK_LOSS_RATIO = 1
+FECG_PEAK_LOSS_RATIO = 50
 
 # data
 DROP_LAST = args.drop_last

@@ -95,13 +95,17 @@ class ECGDataset(Dataset):
 
         if self.load_type == 'competition':
             transforms.add_transform('filter', ('mecg_sig', 125, 1, 55, 3))
+            transforms.add_transform('filter', ('fecg_sig', 125, 1, 55, 3))
             desired_length = WINDOW_LENGTH * NUM_WINDOWS
             transforms.add_transform('perform_trim', (desired_length, 0, 'mecg_sig', 'fecg_sig'))
             transforms.add_transform('trim_peaks', (desired_length, 0))
-            transforms.add_transform('duplicate_keys', ('mecg_sig', 'binary_maternal_mask', 'binary_fetal_mask'))
+            transforms.add_transform('duplicate_keys', ('mecg_sig', 'binary_maternal_mask', 'binary_fetal_mask', 'noise'))
             transforms.add_transform('check_nans', ('mecg_sig', 'fecg_sig'))
             transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask',
-                                                      'binary_maternal_mask',))
+                                                      'binary_maternal_mask', 'noise'))
+            transforms.add_transform('reshape_peaks', ('fecg_peaks',))
+            # transforms.add_transform('print_keys', ('fecg_sig', 'mecg_sig', 'binary_fetal_mask', 'noise'))
+            transforms.add_transform('scale_multiple_segments', None)
             return transforms
 
         if self.load_type == 'whole':
@@ -119,11 +123,9 @@ class ECGDataset(Dataset):
             transforms.add_transform('check_signal_shape', ('fecg_sig', 'mecg_sig'))
             transforms.add_transform('check_nans', ('fecg_sig', 'mecg_sig', 'fecg_peaks', 'binary_maternal_mask',
                                                      'binary_fetal_mask'))
-            # transforms.add_transform('print_keys', ('fecg_sig', 'mecg_sig', 'binary_fetal_mask', 'noise'))
             transforms.add_transform('add_noise_signal', ('noise', 'fecg_sig'))
             transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask', 'binary_maternal_mask', 'noise'))
             transforms.add_transform('reshape_peaks', ('fecg_peaks',))
-            # transforms.add_transform('print_keys', ('noise', 'fecg_peaks'))
             transforms.add_transform('scale_multiple_segments', None)
             return transforms
 
@@ -214,10 +216,9 @@ class ECGDataset(Dataset):
             peaks = np.array(f.read().split('\n')[:-1], dtype=np.int32)
 
         signal = {}
-        signal['mecg_sig'] = ss.decimate(sig, 8, axis=-1)
+        signal['mecg_sig'] = ss.decimate(sig, 8, axis=-1) / 2
         signal['fecg_peaks'] = peaks / 8
-        signal['fecg_sig'] = np.zeros_like(signal['mecg_sig'])
-        signal['noise'] = np.zeros_like(signal['mecg_sig'])
+        signal['fecg_sig'] = signal['mecg_sig'].copy()
 
         self.transforms.perform_transforms(signal)
 

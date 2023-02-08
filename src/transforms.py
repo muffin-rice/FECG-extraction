@@ -69,8 +69,8 @@ class Transforms:
             self.transforms.append((self.filter, transform_params))
         elif transform_name == 'remove_bad_keys':
             self.transforms.append((self.remove_bad_keys, None))
-        elif transform_name == 'duplicate_fecg':
-            self.transforms.append((self.duplicate_fecg, transform_params))
+        elif transform_name == 'duplicate_keys':
+            self.transforms.append((self.duplicate_keys, transform_params))
         elif transform_name == 'perform_trim':
             self.transforms.append((self.perform_trim, transform_params))
         elif transform_name == 'trim_peaks':
@@ -129,7 +129,7 @@ class Transforms:
         for key in get_bad_keys(signal_dict):
             signal_dict.pop(key)
 
-    def duplicate_fecg(self, signal_dict, key_to_dupe, *keys):
+    def duplicate_keys(self, signal_dict, key_to_dupe, *keys):
         for key in keys:
             signal_dict[key] = np.zeros_like(signal_dict[key_to_dupe])
 

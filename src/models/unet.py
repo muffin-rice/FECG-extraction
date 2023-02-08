@@ -60,7 +60,7 @@ class UNet(pl.LightningModule):
         fecg_sig, mecg_sig = x['fecg_sig'][:, :1, :], x['mecg_sig'][:, :1, :]
         offset, noise = x['offset'][:, :1, :], x['noise'][:, :1, :]
         aecg_sig = fecg_sig + mecg_sig - offset + noise
-        fecg_peaks = x['fecg_peaks']
+        fecg_peaks = x['fecg_peaks'][:,0,:]
 
         binary_fetal_mask = x['binary_fetal_mask'][:, :1, :]
         binary_maternal_mask = x['binary_maternal_mask'][:, :1, :]
@@ -126,5 +126,5 @@ class UNet(pl.LightningModule):
 
     def print_summary(self):
         from torchinfo import summary
-        random_input = torch.rand((self.batch_size, 1, 500))
+        random_input = torch.rand((self.batch_size, 1, 250))
         return summary(self, input_data=random_input, depth=7)
