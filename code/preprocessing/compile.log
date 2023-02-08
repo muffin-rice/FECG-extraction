@@ -1,0 +1,350 @@
+syndb
+Subject 0
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Subject 1
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Subject 2
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Subject 3
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Subject 4
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Subject 5
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Subject 6
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Subject 7
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Subject 8
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Subject 9
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+bidmc
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ 0 0 0 0 0 0]
+Validation counts: [0 0 0 0 0 0 0 0 0 0]
+Subject 0
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ 0 0 0 0 0 0]
+Validation counts: [14 14 14 14 14 14 14 14 14 14]
+Subject 1
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ 0 0 0 0 0 0]
+Validation counts: [28 28 28 28 28 28 28 28 28 28]
+Subject 2
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ 0 0 0 0 0 0]
+Validation counts: [42 42 42 42 42 42 42 42 42 42]
+Subject 3
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [3 3 3 3 3 3 4 4 3 3 3 3 3 4 3 3 3 3 3 4 3 3 3 3 4 4 4 3 3 3 3 3 3 4 3 3 3
+ 4 4 3 4 3 3]
+Validation counts: [42 42 42 42 42 42 42 42 42 42]
+Subject 4
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [7 6 7 6 6 7 6 6 6 6 7 7 7 7 6 6 7 7 7 7 6 6 6 7 6 7 7 6 7 7 6 6 7 7 7 7 6
+ 6 7 7 6 6 6]
+Validation counts: [42 42 42 42 42 42 42 42 42 42]
+Subject 5
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [10  9 10 10 10  9 10 10 10 10 10 10 10 10 10  9 10 10  9 10 10  9 10  9
+ 10 10  9 10 10  9 10 10 10 10 10 10  9 10  9 10 10 10 10]
+Validation counts: [42 42 42 42 42 42 42 42 42 42]
+Subject 6
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [13 13 13 13 13 13 13 13 13 13 14 13 13 13 13 13 13 13 13 13 13 13 13 13
+ 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13 13]
+Validation counts: [42 42 42 42 42 42 42 42 42 42]
+Subject 7
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [17 17 16 16 16 16 16 17 16 16 17 17 16 17 16 16 17 16 16 16 16 17 17 16
+ 16 16 17 16 17 16 17 16 16 16 16 16 16 16 16 16 16 16 16]
+Validation counts: [42 42 42 42 42 42 42 42 42 42]
+Subject 8
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [20 20 20 19 19 20 20 20 20 20 20 19 19 20 20 19 19 20 19 19 20 19 20 20
+ 19 19 20 20 20 20 20 20 20 19 19 19 19 19 20 19 19 19 19]
+Validation counts: [42 42 42 42 42 42 42 42 42 42]
+Subject 9
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+fantasia
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+Validation counts: [0 0 0 0 0 0]
+Subject 0
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+Validation counts: [23 24 24 23 23 23]
+Subject 1
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+Validation counts: [46 47 47 47 46 47]
+Subject 2
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+Validation counts: [70 70 70 70 70 70]
+Subject 3
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [6 5 5 5 5 5 6 5 6 5 5 6 6 5 6 5 5 6 5 6 5 5 5 5 6 6]
+Validation counts: [70 70 70 70 70 70]
+Subject 4
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [11 11 11 11 11 11 11 11 10 10 10 11 11 11 10 11 11 10 11 11 11 11 11 10
+ 11 11]
+Validation counts: [70 70 70 70 70 70]
+Subject 5
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [16 17 16 17 16 16 16 17 16 16 16 16 16 16 16 16 16 16 16 16 16 17 16 16
+ 16 16]
+Validation counts: [70 70 70 70 70 70]
+Subject 6
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [22 22 21 21 22 21 22 21 22 22 21 22 22 22 21 21 21 22 21 22 21 22 21 22
+ 22 21]
+Validation counts: [70 70 70 70 70 70]
+Subject 7
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [27 27 26 27 26 27 27 27 27 27 27 27 27 27 27 27 27 27 27 27 27 27 27 27
+ 27 27]
+Validation counts: [70 70 70 70 70 70]
+Subject 8
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [33 32 32 32 32 32 32 32 33 32 33 32 33 33 33 32 32 33 32 32 32 33 32 32
+ 32 32]
+Validation counts: [70 70 70 70 70 70]
+Subject 9
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+nsrdb
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+Validation counts: [0 0 0]
+Subject 0
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+Validation counts: [47 47 46]
+Subject 1
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+Validation counts: [93 93 94]
+Subject 2
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+Validation counts: [140 140 140]
+Subject 3
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [10 10 10 10 10 10 10 10 10 10 10 10 10 10]
+Validation counts: [140 140 140]
+Subject 4
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [20 20 20 20 20 20 20 20 20 20 20 20 20 20]
+Validation counts: [140 140 140]
+Subject 5
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [30 30 30 30 30 30 30 30 30 30 30 30 30 30]
+Validation counts: [140 140 140]
+Subject 6
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [40 40 40 40 40 40 40 40 40 40 40 40 40 40]
+Validation counts: [140 140 140]
+Subject 7
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [50 50 50 50 50 50 50 50 50 50 50 50 50 50]
+Validation counts: [140 140 140]
+Subject 8
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [60 60 60 60 60 60 60 60 60 60 60 60 60 60]
+Validation counts: [140 140 140]
+Subject 9
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+stdb
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+Validation counts: [0 0 0 0 0]
+Subject 0
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+Validation counts: [28 28 28 28 28]
+Subject 1
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+Validation counts: [56 56 56 56 56]
+Subject 2
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+Validation counts: [84 84 84 84 84]
+Subject 3
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 7 6 7 6 6]
+Validation counts: [84 84 84 84 84]
+Subject 4
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [12 12 12 12 12 12 12 13 12 12 12 12 12 12 12 13 13 12 12 12 12 12 13]
+Validation counts: [84 84 84 84 84]
+Subject 5
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [18 18 18 18 18 18 18 18 18 19 18 18 18 18 18 18 19 19 19 19 18 18 19]
+Validation counts: [84 84 84 84 84]
+Subject 6
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [24 25 24 24 24 24 24 25 24 25 25 24 24 24 24 24 25 25 24 24 24 25 25]
+Validation counts: [84 84 84 84 84]
+Subject 7
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [30 31 30 30 31 31 31 31 30 30 30 31 30 30 30 30 31 30 30 31 31 31 30]
+Validation counts: [84 84 84 84 84]
+Subject 8
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
+Train counts: [37 37 37 37 36 36 36 36 36 37 36 36 37 37 37 36 36 37 36 37 37 36 37]
+Validation counts: [84 84 84 84 84]
+Subject 9
+SNR index 1
+SNR index 2
+SNR index 3
+SNR index 4
