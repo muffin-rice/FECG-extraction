@@ -34,6 +34,10 @@ parser.add_argument('--initial_conv', type=int, default=2,
                     help='number of planes in initial conv for peak index pred')
 parser.add_argument('--linear_layers', type=int, default=(108, 128), nargs='+',
                     help='tuple of linear layers for the peak index pred')
+parser.add_argument('--key_dim', type=int, default=128,
+                    help='key dimension')
+parser.add_argument('--val_dim', type=int, default=128,
+                    help='value dimension')
 
 # sys arguments
 parser.add_argument('--model_name', type=str, default='unet_v1',
@@ -130,8 +134,8 @@ EMBED_DIM = 166
 ATTENTION = False
 WINDOW_LENGTH = args.window_length
 MEMORY_LENGTH = args.memory_length
-KEY_DIM = 128
-VAL_DIM = 128
+KEY_DIM = args.key_dim
+VAL_DIM = args.val_dim
 PRETRAINED_UNET_CKPT = args.pretrained_unet
 
 # loss hyperparams (new)

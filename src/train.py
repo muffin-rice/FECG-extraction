@@ -112,7 +112,8 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                                             key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH,
                                             batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                                             window_length=WINDOW_LENGTH, pretrained_unet = None,
-                                            decoder_skip=SKIP,
+                                            decoder_skip=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
+                                            linear_layers=LINEAR_LAYERS,  pad_length=PAD_LENGTH,
                                             )
 
     if unet_path:
@@ -126,7 +127,9 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                    decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                    key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH,
                    batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE, window_length=WINDOW_LENGTH,
-                   pretrained_unet=pretrained_unet, decoder_skips=SKIP)
+                   pretrained_unet=pretrained_unet, decoder_skips=SKIP,
+                   initial_conv_planes=INITIAL_CONV_PLANES, linear_layers=LINEAR_LAYERS,
+                   pad_length=PAD_LENGTH,)
 
 def main(**kwargs):
     tb_logger = TensorBoardLogger(save_dir=LOG_DIR, name=MODEL_NAME)
@@ -163,8 +166,8 @@ def main(**kwargs):
                      accelerator=DEVICE,
                      devices=NUM_TRAINER_WORKERS,
                      max_epochs=NUM_EPOCHS,
-                     auto_lr_find=True,
-                     profiler='pytorch',)
+                     auto_lr_find=True,)
+                     # profiler='pytorch',)
 
     print(f"======= Training {MODEL_NAME} =======")
     if MODEL_VER:

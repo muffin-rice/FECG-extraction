@@ -29,7 +29,7 @@ class FECGMem(pl.LightningModule):
         else:
             self.value_decoder = Decoder(decoder_params, head_params=('sigmoid', 'tanh'), skips=decoder_skips)
             self.value_encoder = Encoder(value_encoder_params)
-            self.fecg_peak_head = PeakHead(starting_planes=fecg_down_params[0][-1], ending_planes=initial_conv_planes,
+            self.fecg_peak_head = PeakHead(starting_planes=value_encoder_params[0][-1], ending_planes=initial_conv_planes,
                                            hidden_layers=linear_layers, output_length=pad_length)
 
         self.key_encoder = Encoder(query_encoder_params)
@@ -157,10 +157,10 @@ class FECGMem(pl.LightningModule):
 
         return loss_dict
 
-    def forward(self, aecg_sig : torch.Tensor, peak_shape) -> {str : torch.Tensor}:
+    def forward(self, aecg_sig : torch.Tensor, peak_shape : torch.Size) -> {str : torch.Tensor}:
         '''data in the format of B x num_windows (set at 100 during training) x window_size'''
         fecg_recon = torch.zeros_like(aecg_sig)
-        fecg_peak_recon = torch.zeros_like(peak_shape)
+        fecg_peak_recon = torch.zeros(peak_shape)
 
         # get initial guess and initialize memory
         initial_aecg_segment = aecg_sig[:, [0], :]
@@ -174,7 +174,7 @@ class FECGMem(pl.LightningModule):
         memory_value = self.retrieve_memory_value(query_proj)
         initial_guess = self.decode_value(memory_value, initial_value_outs)
 
-        fecg_peak_recon[:,0,:] = self.fecg_peak_head(initial_value)
+        fecg_peak_recon[:,0,:] = self.fecg_peak_head(value_proj)
         fecg_recon[:, 0, :] = initial_guess[0][:, 0, :self.window_length]
 
         for i in range(aecg_sig.shape[1]):
@@ -193,7 +193,7 @@ class FECGMem(pl.LightningModule):
             memory_value = self.retrieve_memory_value(query_proj)
             guess = self.decode_value(memory_value, value_outs)
 
-            fecg_peak_recon[:, i, :] = self.fecg_peak_head(value)
+            fecg_peak_recon[:, i, :] = self.fecg_peak_head(memory_value)
             fecg_recon[:,i,:] = guess[0][:, 0, :self.window_length]
 
         # TODO: abolish memory
@@ -269,7 +269,7 @@ class FECGMem(pl.LightningModule):
         model_output = self.forward(aecg_sig, peak_shape=d['fecg_peaks'].shape)
 
         loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'],
-                                                    model_output['fecg_peak_recon'], d['fecg_peaks'][:,0,:])
+                                                    model_output['fecg_peak_recon'], d['fecg_peaks'])
 
         self.log_dict({f'val_{k}': v for k, v in loss_dict.items()}, sync_dist=True, batch_size=self.batch_size)
         model_output.update(loss_dict)
@@ -284,7 +284,7 @@ class FECGMem(pl.LightningModule):
         model_output = self.forward(aecg_sig, peak_shape=d['fecg_peaks'].shape)
 
         loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'],
-                                                    model_output['fecg_peak_recon'], d['fecg_peaks'][:,0,:])
+                                                    model_output['fecg_peak_recon'], d['fecg_peaks'])
 
         model_output.update(loss_dict)
 
