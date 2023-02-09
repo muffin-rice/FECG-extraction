@@ -117,6 +117,7 @@ class ECGDataset(Dataset):
             transforms.add_transform('trim_peaks', (desired_length_trim, 50))
             transforms.add_transform('resample', ('mecg_sig', None, None, desired_length, COMPRESS_RATIO))
             transforms.add_transform('resample', ('fecg_sig', 'noise', 'fecg_peaks', desired_length, COMPRESS_RATIO))
+            transforms.add_transform('correct_peaks', (10, 'fecg_peaks', 'fecg_sig'))
             transforms.add_transform('get_signal_masks', ('fetal_mask', 'binary_fetal_mask', 'fecg_sig', 'fecg_peaks'))
             transforms.add_transform('get_signal_masks', ('maternal_mask', 'binary_maternal_mask', 'mecg_sig', None))
             transforms.add_transform('pop_keys', ('maternal_mask', 'fetal_mask'))

@@ -97,6 +97,8 @@ class Transforms:
             self.transforms.append((self.check_nans, transform_params))
         elif transform_name == 'print_keys':
             self.transforms.append((self.print_keys, transform_params))
+        elif transform_name == 'correct_peaks':
+            self.transforms.append((self.correct_peaks, transform_params))
         else:
             raise NotImplementedError
 
@@ -203,6 +205,10 @@ class Transforms:
                                                                                                 signal_dict['fecg_sig'],
                                                                                                 mf_ratio,
                                                                                                 signal_dict['noise'])
+
+    def correct_peaks(self, signal_dict, window_radius, peak_key, sig_key):
+        signal_dict[peak_key] = correct_peaks(peaks = signal_dict[peak_key], sig = signal_dict[sig_key][0],
+                                              window_radius=window_radius)
 
     def scale_multiple_segments(self, signal_dict):
         '''scales multiple segments'''

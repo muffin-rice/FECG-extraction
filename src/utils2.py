@@ -76,7 +76,7 @@ def correct_peaks(peaks, sig, window_radius):
 
         new_peaks.append(argpeak(sig[start:end+1]).astype(int) + start)
 
-    return new_peaks
+    return np.array(new_peaks)
 
 def scale_signals(mecg_sig, fecg_sig, ratio, noise = None):
     '''scales based on arg[0] + arg[1]'''
