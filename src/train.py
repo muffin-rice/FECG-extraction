@@ -112,7 +112,7 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                                             key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH,
                                             batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                                             window_length=WINDOW_LENGTH, pretrained_unet = None,
-                                            decoder_skip=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
+                                            decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
                                             linear_layers=LINEAR_LAYERS,  pad_length=PAD_LENGTH,
                                             )
 

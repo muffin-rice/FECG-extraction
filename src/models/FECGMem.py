@@ -27,7 +27,7 @@ class FECGMem(pl.LightningModule):
 
             print('Using pretrained value encoder/decoder')
         else:
-            self.value_decoder = Decoder(decoder_params, head_params=('sigmoid', 'tanh'), skips=decoder_skips)
+            self.value_decoder = Decoder(decoder_params, head_params=('tanh',), skips=decoder_skips)
             self.value_encoder = Encoder(value_encoder_params)
             self.fecg_peak_head = PeakHead(starting_planes=value_encoder_params[0][-1], ending_planes=initial_conv_planes,
                                            hidden_layers=linear_layers, output_length=pad_length)
@@ -41,6 +41,7 @@ class FECGMem(pl.LightningModule):
         self.memory_iteration = 0
         self.loss_params = loss_ratios
         self.learning_rate = learning_rate
+        self.pad_length = pad_length
 
         self.float()
 
@@ -157,10 +158,10 @@ class FECGMem(pl.LightningModule):
 
         return loss_dict
 
-    def forward(self, aecg_sig : torch.Tensor, peak_shape : torch.Size) -> {str : torch.Tensor}:
+    def forward(self, aecg_sig : torch.Tensor) -> {str : torch.Tensor}:
         '''data in the format of B x num_windows (set at 100 during training) x window_size'''
         fecg_recon = torch.zeros_like(aecg_sig)
-        fecg_peak_recon = torch.zeros(peak_shape)
+        fecg_peak_recon = torch.zeros(self.peak_shape)
 
         # get initial guess and initialize memory
         initial_aecg_segment = aecg_sig[:, [0], :]
@@ -201,7 +202,7 @@ class FECGMem(pl.LightningModule):
 
         return {'fecg_recon' : fecg_recon, 'fecg_peak_recon' : fecg_peak_recon}
 
-    def train_forward(self, aecg_sig: torch.Tensor, peak_shape) -> {str : torch.Tensor}:
+    def train_forward(self, aecg_sig: torch.Tensor) -> {str : torch.Tensor}:
         '''same thing as forward but only outputs the last segment'''
         # fecg_recon, fecg_peak_recon = torch.zeros_like(aecg_sig), torch.zeros_like(aecg_sig)
 
@@ -266,7 +267,8 @@ class FECGMem(pl.LightningModule):
         self.memory_initialized = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
-        model_output = self.forward(aecg_sig, peak_shape=d['fecg_peaks'].shape)
+        self.peak_shape = d['fecg_peaks'].shape
+        model_output = self.forward(aecg_sig)
 
         loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'],
                                                     model_output['fecg_peak_recon'], d['fecg_peaks'])
@@ -281,7 +283,8 @@ class FECGMem(pl.LightningModule):
         self.memory_initialized = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
-        model_output = self.forward(aecg_sig, peak_shape=d['fecg_peaks'].shape)
+        self.peak_shape = d['fecg_peaks'].shape
+        model_output = self.forward(aecg_sig)
 
         loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'],
                                                     model_output['fecg_peak_recon'], d['fecg_peaks'])
@@ -297,4 +300,5 @@ class FECGMem(pl.LightningModule):
     def print_summary(self, depth = 7):
         from torchinfo import summary
         random_input = torch.rand((self.batch_size, 1, 250))
+        self.peak_shape = (self.batch_size, 5, self.pad_length)
         return summary(self, input_data=random_input, depth=depth)
