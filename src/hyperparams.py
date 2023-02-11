@@ -39,6 +39,12 @@ parser.add_argument('--key_dim', type=int, default=128,
 parser.add_argument('--val_dim', type=int, default=128,
                     help='value dimension')
 
+# loss arguments
+parser.add_argument('--fecg_recon_loss', type=int, default=4,
+                    help='weight factor for fecg recon')
+parser.add_argument('--fecg_peak_loss', type=int, default=1,
+                    help='weight factor for fecg peaks')
+
 # sys arguments
 parser.add_argument('--model_name', type=str, default='unet_v1',
                     help='model name to save for logging')
@@ -139,11 +145,9 @@ VAL_DIM = args.val_dim
 PRETRAINED_UNET_CKPT = args.pretrained_unet
 
 # loss hyperparams (new)
-FECG_RATIO = 20 # fecg recon
-FECG_BCE_RATIO = 1 # fecg bce peak mask
-FECG_BCE_CLASS_RATIO = 1
+FECG_RATIO = args.fecg_recon_loss # fecg recon
 MECG_RATIO = 1 # mecg recon
-FECG_PEAK_LOSS_RATIO = 2
+FECG_PEAK_LOSS_RATIO = args.fecg_peak_loss # fecg peak loss
 
 # data
 DROP_LAST = args.drop_last

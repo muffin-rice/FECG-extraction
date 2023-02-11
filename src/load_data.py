@@ -93,6 +93,8 @@ class ECGDataset(Dataset):
 
         transforms.add_transform('remove_bad_keys', None)
 
+        # TODO: select random window from signal
+
         if self.load_type == 'competition':
             transforms.add_transform('filter', ('mecg_sig', 125, 1, 55, 3))
             transforms.add_transform('filter', ('fecg_sig', 125, 1, 55, 3))
@@ -110,7 +112,8 @@ class ECGDataset(Dataset):
 
         if self.load_type == 'whole':
             transforms.add_transform('downsample', ('fecg_sig', 2))
-            transforms.add_transform('filter', ('mecg_sig', 125, 1, 55, 3))
+            transforms.add_transform('add_noise_signal', ('mecg_sig', 'mecg_sig'))
+            transforms.add_transform('filter', ('mecg_sig', 125, 1, 50, 3))
             desired_length = WINDOW_LENGTH * NUM_WINDOWS
             desired_length_trim = int(WINDOW_LENGTH * NUM_WINDOWS * 1.5)
             transforms.add_transform('perform_trim', (desired_length_trim, 50, 'mecg_sig', 'fecg_sig', 'noise'))
@@ -124,7 +127,6 @@ class ECGDataset(Dataset):
             transforms.add_transform('check_signal_shape', ('fecg_sig', 'mecg_sig'))
             transforms.add_transform('check_nans', ('fecg_sig', 'mecg_sig', 'fecg_peaks', 'binary_maternal_mask',
                                                      'binary_fetal_mask'))
-            transforms.add_transform('add_noise_signal', ('noise', 'fecg_sig'))
             transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask', 'binary_maternal_mask', 'noise'))
             transforms.add_transform('reshape_peaks', ('fecg_peaks',))
             transforms.add_transform('scale_multiple_segments', None)

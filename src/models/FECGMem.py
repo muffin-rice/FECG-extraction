@@ -48,7 +48,7 @@ class FECGMem(pl.LightningModule):
         # TODO: project the memory
         self.query_key_proj = KeyProjector(query_encoder_params[0][-1], key_dim)
         self.value_key_proj = KeyProjector(value_encoder_params[0][-1], val_dim)
-        self.value_unprojer = KeyProjector(val_dim, value_encoder_params[0][-1])
+        self.value_unprojer = KeyProjector(val_dim, decoder_params[0][0])
 
         self.attention_layer = nn.MultiheadAttention(embed_dim=self.key_dim, num_heads=4, batch_first=True)
         # self.memory_key_proj
@@ -252,8 +252,8 @@ class FECGMem(pl.LightningModule):
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
         # performs backwards on the last segment only to avoid inplace operations with the masking
-
-        model_output = self.train_forward(aecg_sig, peak_shape=d['fecg_peaks'].shape)
+        self.peak_shape = d['fecg_peaks'].shape
+        model_output = self.train_forward(aecg_sig)
 
         loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'][:,-1,:],
                                                     model_output['fecg_peak_recon'], d['fecg_peaks'][:,-1,:])

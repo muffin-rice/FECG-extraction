@@ -18,6 +18,8 @@ class UNet(pl.LightningModule):
 
         self.fecg_decode = Decoder(fecg_up_params, ('tanh',), skips=decoder_skips)
 
+
+
         self.fecg_peak_head = PeakHead(starting_planes=fecg_down_params[0][-1], ending_planes=initial_conv_planes,
                                        hidden_layers=linear_layers, output_length=pad_length)
 
