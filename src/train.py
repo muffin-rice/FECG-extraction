@@ -73,6 +73,7 @@ def make_unet(path : str = ''):
                                          batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                                          decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
                                          linear_layers=LINEAR_LAYERS, pad_length=PAD_LENGTH,
+                                         embed_dim=EMBED_DIM
                                          )
 
     return UNet(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
@@ -80,7 +81,8 @@ def make_unet(path : str = ''):
                 fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                 batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                 decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
-                linear_layers=LINEAR_LAYERS, pad_length=PAD_LENGTH,)
+                linear_layers=LINEAR_LAYERS, pad_length=PAD_LENGTH,
+                embed_dim=EMBED_DIM)
 
 def make_wnet(path : str = ''):
     print('=====Making WNet Model=====')
@@ -109,7 +111,7 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                                             query_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                                             value_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                                             decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
-                                            key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH,
+                                            embed_dim=EMBED_DIM, memory_length=MEMORY_LENGTH,
                                             batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                                             window_length=WINDOW_LENGTH, pretrained_unet = None,
                                             decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
@@ -125,7 +127,7 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                    query_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                    value_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
                    decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
-                   key_dim=KEY_DIM, val_dim=VAL_DIM, memory_length=MEMORY_LENGTH,
+                   embed_dim=EMBED_DIM, memory_length=MEMORY_LENGTH,
                    batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE, window_length=WINDOW_LENGTH,
                    pretrained_unet=pretrained_unet, decoder_skips=SKIP,
                    initial_conv_planes=INITIAL_CONV_PLANES, linear_layers=LINEAR_LAYERS,
@@ -150,6 +152,11 @@ def main(**kwargs):
                          batch_size=max(2, int(BATCH_SIZE / NUM_TRAINER_WORKERS)))
     bar = LitProgressBar()
 
+    # tb_logger.experiment.add_hparams({
+    #     'down_planes' : DOWN_PLANES,
+    #     ''
+    # }, {})
+
     runner = Trainer(logger=tb_logger,
                      auto_scale_batch_size=True,
                      callbacks=[
@@ -166,8 +173,8 @@ def main(**kwargs):
                      accelerator=DEVICE,
                      devices=NUM_TRAINER_WORKERS,
                      max_epochs=NUM_EPOCHS,
-                     auto_lr_find=True,)
-                     # profiler='pytorch',)
+                     auto_lr_find=True,
+                     profiler='pytorch',)
 
     print(f"======= Training {MODEL_NAME} =======")
     if MODEL_VER:

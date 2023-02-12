@@ -111,10 +111,10 @@ class ECGDataset(Dataset):
         if self.load_type == 'whole':
             transforms.add_transform('downsample', ('fecg_sig', 2))
             transforms.add_transform('add_noise_signal', ('mecg_sig', 'mecg_sig'))
-            transforms.add_transform('filter', ('mecg_sig', 125, 1, 50, 3))
             desired_length = WINDOW_LENGTH * NUM_WINDOWS
-            desired_length_trim = int(WINDOW_LENGTH * NUM_WINDOWS * 1.5)
+            desired_length_trim = int(WINDOW_LENGTH * NUM_WINDOWS * 1.2)
             transforms.add_transform('perform_trim', (desired_length_trim, ('mecg_sig',), ('fecg_sig', 'noise', 'fecg_peaks')))
+            transforms.add_transform('filter', ('mecg_sig', 125, 1, 50, 3))
             transforms.add_transform('resample', ('mecg_sig', None, None, desired_length, COMPRESS_RATIO))
             transforms.add_transform('resample', ('fecg_sig', 'noise', 'fecg_peaks', desired_length, COMPRESS_RATIO))
             transforms.add_transform('correct_peaks', (10, 'fecg_peaks', 'fecg_sig'))
@@ -271,6 +271,7 @@ class ECGDataModule(LightningDataModule):
 
         return DataLoader(
             data,
+            prefetch_factor=2,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -290,6 +291,7 @@ class ECGDataModule(LightningDataModule):
 
         return DataLoader(
             data,
+            prefetch_factor=2,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -309,6 +311,7 @@ class ECGDataModule(LightningDataModule):
 
         return DataLoader(
             data,
+            prefetch_factor=2,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,

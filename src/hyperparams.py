@@ -38,6 +38,8 @@ parser.add_argument('--key_dim', type=int, default=128,
                     help='key dimension')
 parser.add_argument('--val_dim', type=int, default=128,
                     help='value dimension')
+parser.add_argument('--embed_dim', type=int, default=128,
+                    help='embed dimension')
 
 # loss arguments
 parser.add_argument('--fecg_recon_loss', type=int, default=4,
@@ -136,12 +138,12 @@ SKIP = args.skips
 INITIAL_CONV_PLANES = args.initial_conv
 LINEAR_LAYERS = tuple(args.linear_layers)
 # attention hyperparameters
-EMBED_DIM = 166
 ATTENTION = False
 WINDOW_LENGTH = args.window_length
 MEMORY_LENGTH = args.memory_length
-KEY_DIM = args.key_dim
-VAL_DIM = args.val_dim
+# KEY_DIM = args.key_dim
+# VAL_DIM = args.val_dim
+EMBED_DIM = args.embed_dim
 PRETRAINED_UNET_CKPT = args.pretrained_unet
 
 # loss hyperparams (new)

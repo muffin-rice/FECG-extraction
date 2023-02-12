@@ -1,13 +1,13 @@
 import torch
 from torch import nn, optim
 import pytorch_lightning as pl
-from .network_modules import Encoder, Decoder, PeakHead
+from .network_modules import Encoder, Decoder, PeakHead, KeyProjector
 from .losses import *
 
 class UNet(pl.LightningModule):
     def __init__(self, sample_ecg : torch.Tensor, learning_rate : float, fecg_down_params : ((int,),),
                  fecg_up_params : ((int,),), loss_ratios : {str : int}, batch_size : int, decoder_skips : bool,
-                 initial_conv_planes : int, linear_layers : (int,), pad_length : int):
+                 initial_conv_planes : int, linear_layers : (int,), pad_length : int, embed_dim : int):
         # params in the format ((num_planes), (kernel_width), (stride))
         super().__init__()
 
@@ -18,14 +18,14 @@ class UNet(pl.LightningModule):
 
         self.fecg_decode = Decoder(fecg_up_params, ('tanh',), skips=decoder_skips)
 
-
+        # for pretraining purposes, otherwise is just another conv layer
+        self.value_key_proj = KeyProjector(fecg_down_params[0][-1], embed_dim)
+        self.value_unprojer = KeyProjector(embed_dim, fecg_up_params[0][0])
 
         self.fecg_peak_head = PeakHead(starting_planes=fecg_down_params[0][-1], ending_planes=initial_conv_planes,
                                        hidden_layers=linear_layers, output_length=pad_length)
 
         self.loss_params, self.batch_size = loss_ratios, batch_size
-
-        self.leaky = nn.LeakyReLU(negative_slope=0.1)
         # change dtype
         self.float()
 
@@ -81,10 +81,12 @@ class UNet(pl.LightningModule):
         # fecg_encode_outs : [fecg_sig (template), layer1, layer2, ..., layern, inner_layer]
         fecg_encode_outs = self.fecg_encode(aecg_sig, None)
 
-        # TODO: testing no skip
-        (fecg_recon,), _ = self.fecg_decode(fecg_encode_outs[-1], None)
+        value_proj = self.value_key_proj(fecg_encode_outs[-1])
+        value_unproj = self.value_unprojer(value_proj)
 
-        fecg_peak_recon = self.fecg_peak_head(fecg_encode_outs[-1])
+        (fecg_recon,), _ = self.fecg_decode(value_unproj, None)
+
+        fecg_peak_recon = self.fecg_peak_head(value_unproj)
 
         return {'fecg_recon' : fecg_recon, 'fecg_peak_recon' : fecg_peak_recon}
 

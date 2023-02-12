@@ -10,7 +10,7 @@ from .unet import UNet
 
 class FECGMem(pl.LightningModule):
     '''FECG with memory storage'''
-    def __init__(self, sample_ecg, window_length, query_encoder_params : ((int,),), key_dim : int, val_dim : int,
+    def __init__(self, sample_ecg, window_length, query_encoder_params : ((int,),), embed_dim : int,
                  value_encoder_params : ((int,),), decoder_params : ((int,),), memory_length : int,
                  batch_size : int, learning_rate : float, loss_ratios : {str : int}, pretrained_unet : UNet,
                  decoder_skips : bool, initial_conv_planes : int, linear_layers : (int,), pad_length : int):
@@ -20,6 +20,8 @@ class FECGMem(pl.LightningModule):
             self.value_encoder = pretrained_unet.fecg_encode
             self.value_decoder = pretrained_unet.fecg_decode
             self.fecg_peak_head = pretrained_unet.fecg_peak_head
+            self.value_key_proj = pretrained_unet.value_key_proj
+            self.value_unprojer = pretrained_unet.value_unprojer
 
             # TODO: freeze or not
             # self.value_encoder.freeze()
@@ -31,10 +33,11 @@ class FECGMem(pl.LightningModule):
             self.value_encoder = Encoder(value_encoder_params)
             self.fecg_peak_head = PeakHead(starting_planes=value_encoder_params[0][-1], ending_planes=initial_conv_planes,
                                            hidden_layers=linear_layers, output_length=pad_length)
+            self.value_key_proj = KeyProjector(value_encoder_params[0][-1], embed_dim)
+            self.value_unprojer = KeyProjector(embed_dim, decoder_params[0][0])
 
         self.key_encoder = Encoder(query_encoder_params)
-        self.key_dim = key_dim
-        self.val_dim = val_dim
+        self.embed_dim = embed_dim
         self.memory_initialized = False
         self.batch_size = batch_size
         self.memory_length = memory_length
@@ -46,11 +49,9 @@ class FECGMem(pl.LightningModule):
         self.float()
 
         # TODO: project the memory
-        self.query_key_proj = KeyProjector(query_encoder_params[0][-1], key_dim)
-        self.value_key_proj = KeyProjector(value_encoder_params[0][-1], val_dim)
-        self.value_unprojer = KeyProjector(val_dim, decoder_params[0][0])
+        self.query_key_proj = KeyProjector(query_encoder_params[0][-1], embed_dim)
 
-        self.attention_layer = nn.MultiheadAttention(embed_dim=self.key_dim, num_heads=4, batch_first=True)
+        self.attention_layer = nn.MultiheadAttention(embed_dim=self.embed_dim, num_heads=4, batch_first=True)
         # self.memory_key_proj
 
     def encode_value(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
@@ -84,8 +85,8 @@ class FECGMem(pl.LightningModule):
         memory has shape B x key_dim x memory_length * planes (features)'''
         assert self.memory_initialized is False
         # inputs are B x C x W
-        self.key_memory = torch.zeros((self.batch_size, self.key_dim, self.memory_length * memory_key.shape[2]))
-        self.value_memory = torch.zeros((self.batch_size, self.val_dim, self.memory_length * memory_value.shape[2]))
+        self.key_memory = torch.zeros((self.batch_size, self.embed_dim, self.memory_length * memory_key.shape[2]))
+        self.value_memory = torch.zeros((self.batch_size, self.embed_dim, self.memory_length * memory_value.shape[2]))
 
         self.memory_initialized = True
         self.memory_iteration = 0
@@ -108,10 +109,6 @@ class FECGMem(pl.LightningModule):
 
     def retrieve_memory_value(self, query : torch.Tensor) -> torch.Tensor:
         '''retrieves the value in memory using affinity'''
-        # affinity = self.softmax_affinity(self.compute_affinity(query))
-        # value_memory = self.get_value_memory()
-        # return torch.bmm(value_memory, affinity)
-        #
         value_memory = self.get_value_memory()
         atn = self.attention_layer.forward(query.transpose(1,2), value_memory.transpose(1,2), value_memory.transpose(1,2))
 
@@ -119,7 +116,7 @@ class FECGMem(pl.LightningModule):
 
     def softmax_affinity(self, affinity : torch.Tensor) -> torch.Tensor:
         '''softmaxes affinity matrix S across second dimension'''
-        return nn.Softmax(dim=1)(affinity) / sqrt(self.key_dim)
+        return nn.Softmax(dim=1)(affinity) / sqrt(self.embed_dim)
 
     def compute_affinity(self, query : torch.Tensor) -> torch.Tensor:
         '''computes affinity between current query and key in memory
