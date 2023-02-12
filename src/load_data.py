@@ -93,14 +93,11 @@ class ECGDataset(Dataset):
 
         transforms.add_transform('remove_bad_keys', None)
 
-        # TODO: select random window from signal
-
         if self.load_type == 'competition':
             transforms.add_transform('filter', ('mecg_sig', 125, 1, 55, 3))
             transforms.add_transform('filter', ('fecg_sig', 125, 1, 55, 3))
             desired_length = WINDOW_LENGTH * NUM_WINDOWS
-            transforms.add_transform('perform_trim', (desired_length, 0, 'mecg_sig', 'fecg_sig'))
-            transforms.add_transform('trim_peaks', (desired_length, 0))
+            transforms.add_transform('perform_trim', (desired_length, ('mecg_sig', 'fecg_sig', 'fecg_peaks')))
             transforms.add_transform('duplicate_keys', ('mecg_sig', 'binary_maternal_mask', 'binary_fetal_mask', 'noise'))
             transforms.add_transform('check_nans', ('mecg_sig', 'fecg_sig'))
             transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask',
@@ -116,8 +113,7 @@ class ECGDataset(Dataset):
             transforms.add_transform('filter', ('mecg_sig', 125, 1, 50, 3))
             desired_length = WINDOW_LENGTH * NUM_WINDOWS
             desired_length_trim = int(WINDOW_LENGTH * NUM_WINDOWS * 1.5)
-            transforms.add_transform('perform_trim', (desired_length_trim, 50, 'mecg_sig', 'fecg_sig', 'noise'))
-            transforms.add_transform('trim_peaks', (desired_length_trim, 50))
+            transforms.add_transform('perform_trim', (desired_length_trim, ('mecg_sig',), ('fecg_sig', 'noise', 'fecg_peaks')))
             transforms.add_transform('resample', ('mecg_sig', None, None, desired_length, COMPRESS_RATIO))
             transforms.add_transform('resample', ('fecg_sig', 'noise', 'fecg_peaks', desired_length, COMPRESS_RATIO))
             transforms.add_transform('correct_peaks', (10, 'fecg_peaks', 'fecg_sig'))

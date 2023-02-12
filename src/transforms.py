@@ -3,11 +3,9 @@ from utils2 import scale_signals, generate_gaussian_noise_by_shape, get_random_m
     return_peaks, gauss_kernel, correct_peaks
 from hyperparams import MF_RATIO, NUM_WINDOWS, MF_RATIO_STD, WINDOW_LENGTH, PEAK_SCALE, PEAK_SIGMA, BINARY_PEAK_WINDOW, \
     NOISE, PAD_LENGTH
-from math import cos, sqrt, pi, sin
 from scipy import signal as ss
 from scipy.signal import filtfilt, butter
-from torchaudio.functional import bandpass_biquad
-from torch import from_numpy
+from numpy import random
 
 def calc_peak_mask(sig : np.array, peak_window = PEAK_SCALE, peak_sigma = PEAK_SIGMA,
                    binary_peak_window = BINARY_PEAK_WINDOW, actual_peaks = None):
@@ -135,19 +133,23 @@ class Transforms:
         for key in keys:
             signal_dict[key] = np.zeros_like(signal_dict[key_to_dupe])
 
-    def perform_trim(self, signal_dict, desired_length, offset, *keys):
-        '''trim if necessary to reduce computational load on resampling'''
-        trim_length = int(desired_length + offset)
-        for key in keys:
-            if signal_dict[key].shape[1] < trim_length:
-                return
+    def perform_trim(self, signal_dict, desired_length, *key_groups):
+        '''trim if necessary to reduce computational load on resampling
+        also takes a random window for the trim'''
+        # key group where the trim is the same
+        for key_group in key_groups:
+            signal_length = signal_dict[key_group[0]].shape[1]
+            # TODO: do not assert
+            assert signal_length > desired_length, f'signal length is not long enough {signal_length}'
 
-            signal_dict[key] = signal_dict[key][:, offset:trim_length]
+            random_start = random.randint(signal_length - desired_length)
+            for key in key_group:
+                if 'peak' in key:
+                    signal_dict[key] = signal_dict[key][(signal_dict[key] < desired_length+random_start) &
+                                                              (random_start < signal_dict[key])].astype(int) - random_start
 
-    def trim_peaks(self, signal_dict, desired_length, offset):
-        trim_length = int(desired_length + offset)
-        signal_dict['fecg_peaks'] = signal_dict['fecg_peaks'][(signal_dict['fecg_peaks'] < trim_length) &
-                                                              (offset < signal_dict['fecg_peaks'])].astype(int) - offset
+                else:
+                    signal_dict[key] = signal_dict[key][:, random_start:random_start + desired_length]
 
     def resample_signal(self, signal_dict, resample_key, noise_key, peak_key, desired_length, ratio):
         if noise_key is None and peak_key is None:
