@@ -6,6 +6,8 @@ from hyperparams import MF_RATIO, NUM_WINDOWS, MF_RATIO_STD, WINDOW_LENGTH, PEAK
 from scipy import signal as ss
 from scipy.signal import filtfilt, butter
 from numpy import random
+from torch import from_numpy
+import torch
 
 def calc_peak_mask(sig : np.array, peak_window = PEAK_SCALE, peak_sigma = PEAK_SIGMA,
                    binary_peak_window = BINARY_PEAK_WINDOW, actual_peaks = None):
@@ -71,8 +73,6 @@ class Transforms:
             self.transforms.append((self.duplicate_keys, transform_params))
         elif transform_name == 'perform_trim':
             self.transforms.append((self.perform_trim, transform_params))
-        elif transform_name == 'trim_peaks':
-            self.transforms.append((self.trim_peaks, transform_params))
         elif transform_name == 'resample':
             self.transforms.append((self.resample_signal, transform_params))
         elif transform_name == 'get_signal_masks':
@@ -97,6 +97,8 @@ class Transforms:
             self.transforms.append((self.print_keys, transform_params))
         elif transform_name == 'correct_peaks':
             self.transforms.append((self.correct_peaks, transform_params))
+        elif transform_name == 'change_dtype':
+            self.transforms.append((self.change_dtype, transform_params))
         else:
             raise NotImplementedError
 
@@ -226,6 +228,16 @@ class Transforms:
     def pop_keys(self, signal_dict, *keys_to_pop):
         for key in keys_to_pop:
             signal_dict.pop(key)
+
+    def change_dtype(self, signal_dict, dtype, *keys_to_change):
+        if keys_to_change[0] is None:
+            keys_to_change = signal_dict.keys()
+
+        for key in keys_to_change:
+            if 'arr' in str(type(signal_dict[key])):
+                signal_dict[key] = from_numpy(signal_dict[key]).to(dtype)
+            else:
+                signal_dict[key] = torch.tensor(signal_dict[key], dtype=dtype)
 
     def print_keys(self, signal_dict, *keys_to_print):
         for key in keys_to_print:

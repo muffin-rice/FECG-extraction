@@ -105,6 +105,7 @@ class ECGDataset(Dataset):
             transforms.add_transform('reshape_peaks', ('fecg_peaks',))
             # transforms.add_transform('print_keys', ('fecg_sig', 'mecg_sig', 'binary_fetal_mask', 'noise'))
             transforms.add_transform('scale_multiple_segments', None)
+            transforms.add_transform('change_dtype', (torch.float32, None))
             return transforms
 
         if self.load_type == 'whole':
@@ -126,6 +127,7 @@ class ECGDataset(Dataset):
             transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask', 'binary_maternal_mask', 'noise'))
             transforms.add_transform('reshape_peaks', ('fecg_peaks',))
             transforms.add_transform('scale_multiple_segments', None)
+            transforms.add_transform('change_dtype', (torch.float32, None))
             return transforms
 
         if self.load_type == 'new':
