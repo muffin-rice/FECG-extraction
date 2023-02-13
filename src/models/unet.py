@@ -22,7 +22,7 @@ class UNet(pl.LightningModule):
         self.value_key_proj = KeyProjector(fecg_down_params[0][-1], embed_dim)
         self.value_unprojer = KeyProjector(embed_dim, fecg_up_params[0][0])
 
-        self.fecg_peak_head = PeakHead(starting_planes=fecg_down_params[0][-1], ending_planes=initial_conv_planes,
+        self.fecg_peak_head = PeakHead(starting_planes=embed_dim, ending_planes=initial_conv_planes,
                                        hidden_layers=linear_layers, output_length=pad_length)
 
         self.loss_params, self.batch_size = loss_ratios, batch_size
@@ -86,7 +86,7 @@ class UNet(pl.LightningModule):
 
         (fecg_recon,), _ = self.fecg_decode(value_unproj, None)
 
-        fecg_peak_recon = self.fecg_peak_head(value_unproj)
+        fecg_peak_recon = self.fecg_peak_head(value_proj)
 
         return {'fecg_recon' : fecg_recon, 'fecg_peak_recon' : fecg_peak_recon}
 

@@ -3,7 +3,6 @@ from torch import nn, optim
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from .network_modules import Encoder, KeyProjector, Decoder, PeakHead
-import math
 from numpy import sqrt
 from .losses import *
 from .unet import UNet
@@ -31,7 +30,7 @@ class FECGMem(pl.LightningModule):
         else:
             self.value_decoder = Decoder(decoder_params, head_params=('tanh',), skips=decoder_skips)
             self.value_encoder = Encoder(value_encoder_params)
-            self.fecg_peak_head = PeakHead(starting_planes=value_encoder_params[0][-1], ending_planes=initial_conv_planes,
+            self.fecg_peak_head = PeakHead(starting_planes=embed_dim, ending_planes=initial_conv_planes,
                                            hidden_layers=linear_layers, output_length=pad_length)
             self.value_key_proj = KeyProjector(value_encoder_params[0][-1], embed_dim)
             self.value_unprojer = KeyProjector(embed_dim, decoder_params[0][0])
@@ -85,8 +84,8 @@ class FECGMem(pl.LightningModule):
         memory has shape B x key_dim x memory_length * planes (features)'''
         assert self.memory_initialized is False
         # inputs are B x C x W
-        self.key_memory = torch.zeros((self.batch_size, self.embed_dim, self.memory_length * memory_key.shape[2]))
-        self.value_memory = torch.zeros((self.batch_size, self.embed_dim, self.memory_length * memory_value.shape[2]))
+        self.key_memory = torch.zeros((self.batch_size, self.embed_dim, self.memory_length * memory_key.shape[2])).to(self.device)
+        self.value_memory = torch.zeros((self.batch_size, self.embed_dim, self.memory_length * memory_value.shape[2])).to(self.device)
 
         self.memory_initialized = True
         self.memory_iteration = 0
@@ -110,7 +109,7 @@ class FECGMem(pl.LightningModule):
     def retrieve_memory_value(self, query : torch.Tensor) -> torch.Tensor:
         '''retrieves the value in memory using affinity'''
         value_memory = self.get_value_memory()
-        atn = self.attention_layer.forward(query.transpose(1,2), value_memory.transpose(1,2), value_memory.transpose(1,2))
+        atn = self.attention_layer.forward(query.transpose(1,2), query.transpose(1,2), value_memory.transpose(1,2))
 
         return atn[0].transpose(1,2)
 
@@ -157,8 +156,8 @@ class FECGMem(pl.LightningModule):
 
     def forward(self, aecg_sig : torch.Tensor) -> {str : torch.Tensor}:
         '''data in the format of B x num_windows (set at 100 during training) x window_size'''
-        fecg_recon = torch.zeros_like(aecg_sig)
-        fecg_peak_recon = torch.zeros(self.peak_shape)
+        fecg_recon = torch.zeros_like(aecg_sig).to(self.device)
+        fecg_peak_recon = torch.zeros(self.peak_shape).to(self.device)
 
         # get initial guess and initialize memory
         initial_aecg_segment = aecg_sig[:, [0], :]

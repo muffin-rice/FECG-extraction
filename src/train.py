@@ -148,6 +148,8 @@ def main(**kwargs):
     else:
         raise NotImplementedError
 
+    model.to(DEVICE)
+
     data = ECGDataModule(data_dir=DATA_DIR, window_size=500, num_workers=NUM_DATA_WORKERS,
                          batch_size=max(2, int(BATCH_SIZE / NUM_TRAINER_WORKERS)))
     bar = LitProgressBar()
