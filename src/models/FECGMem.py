@@ -109,22 +109,22 @@ class FECGMem(pl.LightningModule):
     def retrieve_memory_value(self, query : torch.Tensor) -> torch.Tensor:
         '''retrieves the value in memory using affinity'''
         value_memory = self.get_value_memory()
-        atn = self.attention_layer.forward(query.transpose(1,2), query.transpose(1,2), value_memory.transpose(1,2))
+        atn = self.attention_layer.forward(query.transpose(1,2), value_memory.transpose(1,2), value_memory.transpose(1,2))
 
         return atn[0].transpose(1,2)
 
-    def softmax_affinity(self, affinity : torch.Tensor) -> torch.Tensor:
-        '''softmaxes affinity matrix S across second dimension'''
-        return nn.Softmax(dim=1)(affinity) / sqrt(self.embed_dim)
+    # def softmax_affinity(self, affinity : torch.Tensor) -> torch.Tensor:
+    #     '''softmaxes affinity matrix S across second dimension'''
+    #     return nn.Softmax(dim=1)(affinity) / sqrt(self.embed_dim)
 
-    def compute_affinity(self, query : torch.Tensor) -> torch.Tensor:
-        '''computes affinity between current query and key in memory
-        currently uses dot product'''
-        # input is B x Ck x W, output is B x L*W x W
-        key_memory = self.get_key_memory()
-        assert query.shape[1] == key_memory.shape[1]
-        # dot product is bmm of transpose
-        return torch.bmm(key_memory.transpose(1,2), query)
+    # def compute_affinity(self, query : torch.Tensor) -> torch.Tensor:
+    #     '''computes affinity between current query and key in memory
+    #     currently uses dot product'''
+    #     # input is B x Ck x W, output is B x L*W x W
+    #     key_memory = self.get_key_memory()
+    #     assert query.shape[1] == key_memory.shape[1]
+    #     # dot product is bmm of transpose
+    #     return torch.bmm(key_memory.transpose(1,2), query)
 
     def loss_function(self, results) -> torch.Tensor:
         # return all the losses with hyperparameters defined earlier
@@ -290,7 +290,7 @@ class FECGMem(pl.LightningModule):
         return model_output
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
+        optimizer = optim.RAdam(self.parameters(), lr=self.learning_rate)
         return optimizer
 
     def print_summary(self, depth = 7):
