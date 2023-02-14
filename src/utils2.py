@@ -4,7 +4,7 @@ import torch
 from ecgdetectors import Detectors
 from math import pi, sqrt, exp
 from scipy.signal import savgol_filter, filtfilt, firwin, firwin2, resample
-from numpy.random import normal, uniform
+from numpy.random import normal, uniform, choice
 
 DETECTOR = Detectors(125).pan_tompkins_detector
 
@@ -183,3 +183,10 @@ def resample_signal_noise_peak(signal : np.array, ratio, desired_length = 500, s
         resampled_peak = resampled_peak[resampled_peak < desired_length]
 
     return resampled_signal, resampled_noise, resampled_peak
+
+def get_random_numwindow(max_windows : int, weights : [float]) -> int:
+    assert len(weights) == max_windows
+
+    x = choice(range(max_windows), p=weights) + 1
+
+    return x

@@ -7,6 +7,7 @@ from pytorch_lightning import LightningDataModule
 from hyperparams import *
 from transforms import *
 from wfdb.io import rdrecord
+from utils2 import get_random_numwindow
 
 def load_data(data_dir: str) -> np.array:
     dataset = []
@@ -94,6 +95,7 @@ class ECGDataset(Dataset):
         transforms.add_transform('remove_bad_keys', None)
 
         if self.load_type == 'competition':
+            transforms.add_transform('add_to_dict', ('num_windows', NUM_WINDOWS))
             transforms.add_transform('filter', ('mecg_sig', 125, 1, 55, 3))
             transforms.add_transform('filter', ('fecg_sig', 125, 1, 55, 3))
             desired_length = WINDOW_LENGTH * NUM_WINDOWS
@@ -110,23 +112,30 @@ class ECGDataset(Dataset):
 
         if self.load_type == 'whole':
             transforms.add_transform('downsample', ('fecg_sig', 2))
-            transforms.add_transform('add_noise_signal', ('mecg_sig', 'mecg_sig'))
-            desired_length = WINDOW_LENGTH * NUM_WINDOWS
-            desired_length_trim = int(WINDOW_LENGTH * NUM_WINDOWS * 1.2)
+            if NUM_WINDOWS > 1:
+                curr_num_windows = get_random_numwindow(NUM_WINDOWS, WINDOW_WEIGHTS)
+            else:
+                curr_num_windows = 1
+
+            transforms.add_transform('add_to_dict', ('num_windows', curr_num_windows))
+
+            desired_length = WINDOW_LENGTH * curr_num_windows
+            desired_length_trim = int(desired_length * 1.2) # trim to keep in length of resampling
             transforms.add_transform('perform_trim', (desired_length_trim, ('mecg_sig',), ('fecg_sig', 'noise', 'fecg_peaks')))
+            transforms.add_transform('add_noise_signal', ('mecg_sig', 'mecg_sig'))
             transforms.add_transform('filter', ('mecg_sig', 125, 1, 50, 3))
             transforms.add_transform('resample', ('mecg_sig', None, None, desired_length, COMPRESS_RATIO))
             transforms.add_transform('resample', ('fecg_sig', 'noise', 'fecg_peaks', desired_length, COMPRESS_RATIO))
             transforms.add_transform('correct_peaks', (10, 'fecg_peaks', 'fecg_sig'))
             transforms.add_transform('get_signal_masks', ('fetal_mask', 'binary_fetal_mask', 'fecg_sig', 'fecg_peaks'))
             transforms.add_transform('get_signal_masks', ('maternal_mask', 'binary_maternal_mask', 'mecg_sig', None))
-            transforms.add_transform('pop_keys', ('maternal_mask', 'fetal_mask'))
             transforms.add_transform('check_signal_shape', ('fecg_sig', 'mecg_sig'))
             transforms.add_transform('check_nans', ('fecg_sig', 'mecg_sig', 'fecg_peaks', 'binary_maternal_mask',
                                                      'binary_fetal_mask'))
             transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask', 'binary_maternal_mask', 'noise'))
             transforms.add_transform('reshape_peaks', ('fecg_peaks',))
             transforms.add_transform('scale_multiple_segments', None)
+            transforms.add_transform('pop_keys', ('maternal_mask', 'fetal_mask', 'num_windows'))
             transforms.add_transform('change_dtype', (torch.float32, None))
             return transforms
 

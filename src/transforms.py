@@ -1,7 +1,7 @@
 import numpy as np
 from utils2 import scale_signals, generate_gaussian_noise_by_shape, get_random_mfratio, resample_signal_noise_peak, \
     return_peaks, gauss_kernel, correct_peaks
-from hyperparams import MF_RATIO, NUM_WINDOWS, MF_RATIO_STD, WINDOW_LENGTH, PEAK_SCALE, PEAK_SIGMA, BINARY_PEAK_WINDOW, \
+from hyperparams import MF_RATIO, MF_RATIO_STD, WINDOW_LENGTH, PEAK_SCALE, PEAK_SIGMA, BINARY_PEAK_WINDOW, \
     NOISE, PAD_LENGTH
 from scipy import signal as ss
 from scipy.signal import filtfilt, butter
@@ -9,8 +9,8 @@ from numpy import random
 from torch import from_numpy
 import torch
 
-def calc_peak_mask(sig : np.array, peak_window = PEAK_SCALE, peak_sigma = PEAK_SIGMA,
-                   binary_peak_window = BINARY_PEAK_WINDOW, actual_peaks = None):
+def calc_peak_mask(sig : np.array, num_windows : int, peak_window = PEAK_SCALE, peak_sigma = PEAK_SIGMA,
+                   binary_peak_window = BINARY_PEAK_WINDOW, actual_peaks = None,):
     # signal should be single channel; 1 x sig_length
 
     if actual_peaks is None:
@@ -24,7 +24,7 @@ def calc_peak_mask(sig : np.array, peak_window = PEAK_SCALE, peak_sigma = PEAK_S
 
     for peak in peaks:
         peak = int(peak)
-        if peak >= WINDOW_LENGTH*NUM_WINDOWS:
+        if peak >= WINDOW_LENGTH*num_windows:
             break
         left, right = peak-int(peak_window/2), peak+int(peak_window/2)+1
         peak_mask[left : right] = gauss_kernel(peak_window, peak_sigma)[:len(peak_mask[left : right])]
@@ -33,7 +33,8 @@ def calc_peak_mask(sig : np.array, peak_window = PEAK_SCALE, peak_sigma = PEAK_S
 
     return peak_mask, binary_peak_mask
 
-def calc_multi_channel_peak_mask(sig : np.ndarray, peak_window = PEAK_SCALE, peak_sigma = PEAK_SIGMA, actual_peaks = None):
+def calc_multi_channel_peak_mask(sig : np.ndarray, num_windows : int, peak_window = PEAK_SCALE, peak_sigma = PEAK_SIGMA,
+                                 actual_peaks = None):
     mask = np.zeros(sig.shape)
     binary_peak_mask = np.zeros(sig.shape)
 
@@ -99,6 +100,8 @@ class Transforms:
             self.transforms.append((self.correct_peaks, transform_params))
         elif transform_name == 'change_dtype':
             self.transforms.append((self.change_dtype, transform_params))
+        elif transform_name == 'add_to_dict':
+            self.transforms.append((self.add_to_dict, transform_params))
         else:
             raise NotImplementedError
 
@@ -165,20 +168,22 @@ class Transforms:
     def get_signal_masks(self, signal_dict, mask_key, binary_mask_key, sig_key, peak_key):
         '''puts signal mask keys into dict based on the given signal key'''
         if peak_key is None:
-            signal_dict[mask_key], signal_dict[binary_mask_key] = calc_multi_channel_peak_mask(signal_dict[sig_key])
+            signal_dict[mask_key], signal_dict[binary_mask_key] = calc_multi_channel_peak_mask(signal_dict[sig_key],
+                                                                                               signal_dict['num_windows'])
         else:
             signal_dict[mask_key], signal_dict[binary_mask_key] = calc_multi_channel_peak_mask(signal_dict[sig_key],
+                                                                                               signal_dict['num_windows'],
                                                                                                actual_peaks=
                                                                                                signal_dict[peak_key],)
 
     def reshape_keys(self, signal_dict, *keys):
         '''reshape signal into n_segments x segment for individual scaling'''
         for key in keys:
-            signal_dict[key] = signal_dict[key].reshape(NUM_WINDOWS, WINDOW_LENGTH)
+            signal_dict[key] = signal_dict[key].reshape(signal_dict['num_windows'], WINDOW_LENGTH)
 
     def reshape_peaks(self, signal_dict, peak_key, pad_length=PAD_LENGTH):
-        peak_locs = np.zeros((NUM_WINDOWS, pad_length))
-        for window in range(NUM_WINDOWS):
+        peak_locs = np.zeros((signal_dict['num_windows'], pad_length))
+        for window in range(signal_dict['num_windows']):
             borders = (window*WINDOW_LENGTH, (window+1)*WINDOW_LENGTH)
             between = np.logical_and(signal_dict[peak_key] > borders[0], signal_dict[peak_key] < borders[1])
             bordered_peaks = (signal_dict[peak_key][between] - borders[0]) / WINDOW_LENGTH
@@ -219,7 +224,7 @@ class Transforms:
         mf_ratio = get_random_mfratio(MF_RATIO, MF_RATIO_STD)
         signal_dict['offset'] = np.zeros_like(signal_dict['mecg_sig'])
         signal_dict['mf_ratio'] = mf_ratio
-        for i in range(NUM_WINDOWS):
+        for i in range(signal_dict['num_windows']):
             signal_dict['mecg_sig'][i, :], signal_dict['fecg_sig'][i, :], signal_dict['offset'][i, :] = scale_signals(
                 signal_dict['mecg_sig'][[i], :],
                 signal_dict['fecg_sig'][[i], :], mf_ratio,
@@ -238,6 +243,9 @@ class Transforms:
                 signal_dict[key] = from_numpy(signal_dict[key]).to(dtype)
             else:
                 signal_dict[key] = torch.tensor(signal_dict[key], dtype=dtype)
+
+    def add_to_dict(self, signal_dict, key, val):
+        signal_dict[key] = val
 
     def print_keys(self, signal_dict, *keys_to_print):
         for key in keys_to_print:
