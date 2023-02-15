@@ -21,7 +21,8 @@ def load_data(data_dir: str) -> np.array:
 
 
 class ECGDataset(Dataset):
-    def __init__(self, window_size, split: str = 'train', numtaps = NUM_TAPS, data_dir=DATA_DIR, load_type=LOAD_TYPE):
+    def __init__(self, window_size, split: str = 'train', numtaps = NUM_TAPS, data_dir=DATA_DIR, load_type=LOAD_TYPE,
+                 fixed_num_windows : bool = FIXED_NUM_WINDOWS):
         super(ECGDataset, self).__init__()
         # self.train_data, self.val_data, self.test_data = load_data(data_dir)
         self.noise = NOISE
@@ -29,6 +30,7 @@ class ECGDataset(Dataset):
         self.load_type = load_type
         self.ratio = COMPRESS_RATIO
         self.num_taps = numtaps
+        self.fixed_num_windows = fixed_num_windows
 
         if TRAIN_PEAKHEAD:
             # TODO: remove hardcoded
@@ -112,7 +114,9 @@ class ECGDataset(Dataset):
 
         if self.load_type == 'whole':
             transforms.add_transform('downsample', ('fecg_sig', 2))
-            if NUM_WINDOWS > 1:
+            if self.fixed_num_windows:
+                curr_num_windows = NUM_WINDOWS
+            elif NUM_WINDOWS > 1:
                 curr_num_windows = get_random_numwindow(NUM_WINDOWS, WINDOW_WEIGHTS)
             else:
                 curr_num_windows = 1

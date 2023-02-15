@@ -82,6 +82,10 @@ parser.add_argument('--drop_last', type=bool, default=True,
                     help='droplast for dataloader')
 parser.add_argument('--peak_padding', type=int, default=10,
                     help='length to pad peak array')
+parser.add_argument('--fixed_num_windows', type=bool, default=False,
+                    help='fix num windows at num_windows')
+parser.add_argument('--window_weights', type=float, default=(.2,.2,.2,.2,.2), nargs='+',
+                    help='weights of windows for sampling')
 
 # train arguments
 parser.add_argument('--trainer_workers', type=int, default=1,
@@ -166,7 +170,8 @@ BINARY_PEAK_WINDOW = 0 # +-2 marked as 1
 COMPRESS_RATIO = (0.84,1.16)
 PEAK_SCALE = 1
 PEAK_SIGMA = 1
-WINDOW_WEIGHTS = [.1,.1,.1,.3,.4]
+WINDOW_WEIGHTS = args.window_weights
+FIXED_NUM_WINDOWS = args.fixed_num_windows
 PAD_LENGTH = args.peak_padding
 import numpy as np
 COMPETITION_CHANNELS = np.array([1,1,1,1,1,1,4,1,1,4,2,1,2,1,1,1,3,1,2,3,1,1,2,2,2,2,1,2,1,3,1,1,3,1,3,1,1,1,1,1,1,1,1,1,1,1,2,1,2,4,4,2,1,1,1,1,1,1,1,4,1,1,1,1,1,1,2,1,2,1,4,1,2,1,1]) - 1
