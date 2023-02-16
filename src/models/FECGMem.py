@@ -49,8 +49,7 @@ class FECGMem(pl.LightningModule):
 
         # TODO: project the memory
         self.query_key_proj = KeyProjector(query_encoder_params[0][-1], embed_dim)
-
-        self.attention_layer = nn.MultiheadAttention(embed_dim=self.embed_dim, num_heads=4, batch_first=True)
+        # self.attention_layer = nn.MultiheadAttention(embed_dim=self.embed_dim, num_heads=4, batch_first=True)
         # self.memory_key_proj
 
     def encode_value(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
@@ -71,12 +70,12 @@ class FECGMem(pl.LightningModule):
 
         return initial_guess
 
-    def get_key_memory(self):
-        '''create functions for training inplace behavior'''
+    def get_key_memory(self) -> torch.Tensor:
+        '''returns value memory in shape of B x key_dim x memory_length*planes'''
         return self.key_memory
 
-    def get_value_memory(self):
-        '''create functions for training inplace behavior'''
+    def get_value_memory(self) -> torch.Tensor:
+        '''returns value memory in shape of B x val_dim x memory_length*planes'''
         return self.value_memory
 
     def _initialize_memory(self, memory_key : torch.Tensor, memory_value : torch.Tensor):
@@ -108,23 +107,45 @@ class FECGMem(pl.LightningModule):
 
     def retrieve_memory_value(self, query : torch.Tensor) -> torch.Tensor:
         '''retrieves the value in memory using affinity'''
-        value_memory = self.get_value_memory()
-        atn = self.attention_layer.forward(query.transpose(1,2), value_memory.transpose(1,2), value_memory.transpose(1,2))
+        # value_memory = self.get_value_memory()
+        # atn = self.attention_layer.forward(query.transpose(1,2), value_memory.transpose(1,2), value_memory.transpose(1,2))
+        #
+        # return atn[0].transpose(1,2)
+        affinity = self.compute_affinity(query)
+        softmax_aff = self.softmax_affinity(affinity)
 
-        return atn[0].transpose(1,2)
+        memory_value = self.get_value_memory()
 
-    # def softmax_affinity(self, affinity : torch.Tensor) -> torch.Tensor:
-    #     '''softmaxes affinity matrix S across second dimension'''
-    #     return nn.Softmax(dim=1)(affinity) / sqrt(self.embed_dim)
+        assert memory_value.shape[2] == softmax_aff.shape[1]
 
-    # def compute_affinity(self, query : torch.Tensor) -> torch.Tensor:
-    #     '''computes affinity between current query and key in memory
-    #     currently uses dot product'''
-    #     # input is B x Ck x W, output is B x L*W x W
-    #     key_memory = self.get_key_memory()
-    #     assert query.shape[1] == key_memory.shape[1]
-    #     # dot product is bmm of transpose
-    #     return torch.bmm(key_memory.transpose(1,2), query)
+        memval_softmaxed = torch.bmm(memory_value, softmax_aff)
+
+        return memval_softmaxed
+
+    def compute_cosine_similarity(self, query, key_memory):
+        assert query.shape[1] == key_memory.shape[1]
+        cosine_similarity = torch.bmm(key_memory.transpose(1,2), query) / torch.norm(query, dim=[1,2]) / torch.norm(key_memory, dim=[1,2])
+        return cosine_similarity
+
+    def compute_dot_similarity(self, query, key_memory):
+        assert query.shape[1] == key_memory.shape[1]
+        dot_similarity = torch.bmm(key_memory.transpose(1, 2), query)
+        return dot_similarity
+
+    def softmax_affinity(self, affinity : torch.Tensor) -> torch.Tensor:
+        '''softmaxes affinity matrix S across second dimension
+        output is softmaxed B x NQk '''
+        softmaxed = nn.Softmax(dim=1)(affinity)
+        return softmaxed
+        # return nn.Softmax(dim=1)(affinity) # / sqrt(self.embed_dim)
+
+    def compute_affinity(self, query : torch.Tensor) -> torch.Tensor:
+        '''computes affinity between current query and key in memory
+        currently uses dot product
+        output is B x Qk * NQk'''
+        # input is B x Ck x W, output is B x L*W x W
+        key_memory = self.get_key_memory()
+        return self.compute_dot_similarity(query, key_memory)
 
     def loss_function(self, results) -> torch.Tensor:
         # return all the losses with hyperparameters defined earlier
