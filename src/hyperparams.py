@@ -85,7 +85,7 @@ parser.add_argument('--peak_padding', type=int, default=10,
 parser.add_argument('--fixed_num_windows', type=bool, default=False,
                     help='fix num windows at num_windows')
 parser.add_argument('--window_weights', type=float, default=(.2,.2,.2,.2,.2), nargs='+',
-                    help='weights of windows for sampling')
+                    help='weights of windows for sampling (if fixednumwin=False)')
 
 # train arguments
 parser.add_argument('--trainer_workers', type=int, default=1,
@@ -94,6 +94,10 @@ parser.add_argument('--num_epochs', type=int, default=120,
                     help='number of epochs')
 parser.add_argument('--num_windows', type=int, default=100,
                     help='number of windows to split up a signal')
+parser.add_argument('--save_steps', type=int, default=500,
+                    help='number of steps to periodically save')
+parser.add_argument('--eval_check', type=int, default=1,
+                    help='number of train epochs per eval epoch')
 
 args, unknown = parser.parse_known_args()
 
@@ -113,8 +117,8 @@ BATCH_SIZE = args.batch_size
 FIND_UNUSED=False
 NUM_EPOCHS = args.num_epochs
 SAMPLE_ECG_PKL = args.sample_ecg_path
-SAVE_N_STEPS = 500
-TRAIN_PER_VAL_RUN = 1
+SAVE_N_STEPS = args.save_steps
+TRAIN_PER_VAL_RUN = args.eval_check
 LAMBDA_LR = 0
 LOSS_THRESHOLD=1
 TRAIN_PEAKHEAD = False
@@ -126,7 +130,6 @@ if os.path.isfile(SAMPLE_ECG_PKL):
 
 # model hyperparameters
 MODEL = args.model
-Z_DIM = 128
 NUM_BLOCKS = tuple(args.blocks)
 DOWN_PLANES = tuple(args.down_planes)
 DOWN_KERNELS = tuple(args.down_kernels)
@@ -135,14 +138,10 @@ UP_PLANES = tuple(args.up_planes)
 UP_KERNELS = tuple(args.up_kernels)
 UP_STRIDES = tuple(args.up_strides)
 assert len(UP_PLANES) == len(DOWN_PLANES)
-START_CHANNELS = 1
-END_CHANNELS = 3
-RECON_SIG = 'gt_fecg' # signal to reconstruct
 SKIP = args.skips
 INITIAL_CONV_PLANES = args.initial_conv
 LINEAR_LAYERS = tuple(args.linear_layers)
 # attention hyperparameters
-ATTENTION = False
 WINDOW_LENGTH = args.window_length
 MEMORY_LENGTH = args.memory_length
 # KEY_DIM = args.key_dim
@@ -170,7 +169,7 @@ BINARY_PEAK_WINDOW = 0 # +-2 marked as 1
 COMPRESS_RATIO = (0.84,1.16)
 PEAK_SCALE = 1
 PEAK_SIGMA = 1
-WINDOW_WEIGHTS = args.window_weights
+WINDOW_WEIGHTS = tuple(args.window_weights)
 FIXED_NUM_WINDOWS = args.fixed_num_windows
 PAD_LENGTH = args.peak_padding
 import numpy as np
