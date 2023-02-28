@@ -11,11 +11,17 @@ parser.add_argument('--model', type=str, default='unet',
 parser.add_argument('--blocks', type=int, default=(8,8,8,8), nargs='+',
                     help='number of blocks')
 parser.add_argument('--down_planes', type=int, default=(1,64,64,64,64), nargs='+',
-                    help='number of planes in encoder')
+                    help='number of planes in (value) encoder')
 parser.add_argument('--down_kernels', type=int, default=(5,3,3,3), nargs='+',
-                    help='kernel size in encoder')
+                    help='kernel size in (value) encoder')
 parser.add_argument('--down_strides', type=int, default=(3,2,1,1), nargs='+',
-                    help='stride length in encoder')
+                    help='stride length in (value) encoder')
+parser.add_argument('--down_planes2', type=int, default=(1,64,64,64,64), nargs='+',
+                    help='number of planes in (memory) encoder')
+parser.add_argument('--down_kernels2', type=int, default=(5,3,3,3), nargs='+',
+                    help='kernel size in (memory) encoder')
+parser.add_argument('--down_strides2', type=int, default=(3,2,1,1), nargs='+',
+                    help='stride length in (memory) encoder')
 parser.add_argument('--up_planes', type=int, default=(64,64,64,64,1), nargs='+',
                     help='number of planes in decoder')
 parser.add_argument('--up_kernels', type=int, default=(3,3,4,6), nargs='+',
@@ -131,13 +137,16 @@ if os.path.isfile(SAMPLE_ECG_PKL):
 # model hyperparameters
 MODEL = args.model
 NUM_BLOCKS = tuple(args.blocks)
-DOWN_PLANES = tuple(args.down_planes)
-DOWN_KERNELS = tuple(args.down_kernels)
-DOWN_STRIDES = tuple(args.down_strides)
+VALUE_DOWN_PLANES = tuple(args.down_planes)
+VALUE_DOWN_KERNELS = tuple(args.down_kernels)
+VALUE_DOWN_STRIDES = tuple(args.down_strides)
+MEMORY_DOWN_PLANES = tuple(args.down_planes2)
+MEMORY_DOWN_KERNELS = tuple(args.down_kernels2)
+MEMORY_DOWN_STRIDES = tuple(args.down_strides2)
 UP_PLANES = tuple(args.up_planes)
 UP_KERNELS = tuple(args.up_kernels)
 UP_STRIDES = tuple(args.up_strides)
-assert len(UP_PLANES) == len(DOWN_PLANES)
+assert len(UP_PLANES) == len(VALUE_DOWN_PLANES)
 SKIP = args.skips
 INITIAL_CONV_PLANES = args.initial_conv
 LINEAR_LAYERS = tuple(args.linear_layers)

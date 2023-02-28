@@ -58,7 +58,6 @@ class UNet(pl.LightningModule):
         return loss_dict
 
     def remap_input(self, x):
-        # print(x.keys())
         fecg_sig, mecg_sig = x['fecg_sig'][:, :1, :], x['mecg_sig'][:, :1, :]
         offset, noise = x['offset'][:, :1, :], x['noise'][:, :1, :]
         aecg_sig = fecg_sig + mecg_sig - offset + noise
@@ -85,6 +84,7 @@ class UNet(pl.LightningModule):
         value_unproj = self.value_unprojer(value_proj)
 
         (fecg_recon,), _ = self.fecg_decode(value_unproj, None)
+        fecg_recon = fecg_recon[:,:,:aecg_sig.shape[2]]
 
         fecg_peak_recon = self.fecg_peak_head(value_proj)
 

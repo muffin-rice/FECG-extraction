@@ -144,8 +144,15 @@ class PeakHead(nn.Module):
     def __init__(self, starting_planes : int, ending_planes : int, hidden_layers : (int,), output_length : int):
         super().__init__()
 
+        initial_conv = []
         if ending_planes:
-            self.initial_conv = nn.Conv1d(starting_planes, ending_planes, kernel_size=3, padding=1)
+            initial_conv.append(nn.Conv1d(starting_planes, starting_planes, kernel_size=3, padding=1))
+            initial_conv.append(nn.BatchNorm1d(starting_planes))
+            initial_conv.append(nn.LeakyReLU(negative_slope=0.1))
+            initial_conv.append(nn.Conv1d(starting_planes, ending_planes, kernel_size=3, padding=1))
+            initial_conv.append(nn.BatchNorm1d(ending_planes))
+
+        self.initial_conv = nn.Sequential(*initial_conv)
 
         self.flatten = nn.Flatten()
         linears = [nn.LeakyReLU(negative_slope=0.1)]

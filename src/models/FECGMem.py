@@ -122,22 +122,27 @@ class FECGMem(pl.LightningModule):
 
         return memval_softmaxed
 
-    def compute_cosine_similarity(self, query, key_memory):
+    def compute_cosine_similarity(self, query, key_memory, order=2) -> torch.Tensor:
         assert query.shape[1] == key_memory.shape[1]
-        cosine_similarity = torch.bmm(key_memory.transpose(1,2), query) / torch.norm(query, dim=[1,2]) / torch.norm(key_memory, dim=[1,2])
+        dot = torch.bmm(key_memory.transpose(1,2), query)
+        mag_query = torch.norm(query, dim=[1,2], p=order).view(query.shape[0], 1, 1)
+        mag_keymem = torch.norm(key_memory, dim=[1,2], p=order).view(query.shape[0], 1, 1)
+        cosine_similarity = dot / mag_query / mag_keymem
         return cosine_similarity
 
-    def compute_dot_similarity(self, query, key_memory):
+    def compute_dot_similarity(self, query, key_memory) -> torch.Tensor:
         assert query.shape[1] == key_memory.shape[1]
         dot_similarity = torch.bmm(key_memory.transpose(1, 2), query)
         return dot_similarity
+
+    def compute_l2_similarity(self, query, key_memory):
+        pass
 
     def softmax_affinity(self, affinity : torch.Tensor) -> torch.Tensor:
         '''softmaxes affinity matrix S across second dimension
         output is softmaxed B x NQk '''
         softmaxed = nn.Softmax(dim=1)(affinity)
         return softmaxed
-        # return nn.Softmax(dim=1)(affinity) # / sqrt(self.embed_dim)
 
     def compute_affinity(self, query : torch.Tensor) -> torch.Tensor:
         '''computes affinity between current query and key in memory
@@ -145,7 +150,7 @@ class FECGMem(pl.LightningModule):
         output is B x Qk * NQk'''
         # input is B x Ck x W, output is B x L*W x W
         key_memory = self.get_key_memory()
-        return self.compute_dot_similarity(query, key_memory)
+        return self.compute_cosine_similarity(query, key_memory) / sqrt(self.embed_dim)
 
     def loss_function(self, results) -> torch.Tensor:
         # return all the losses with hyperparameters defined earlier

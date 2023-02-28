@@ -68,7 +68,7 @@ def make_unet(path : str = ''):
     if path:
         return UNet.load_from_checkpoint(path,
                                          sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
-                                         fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                                         fecg_down_params=(VALUE_DOWN_PLANES, VALUE_DOWN_KERNELS, VALUE_DOWN_STRIDES),
                                          fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                                          batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                                          decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
@@ -77,7 +77,7 @@ def make_unet(path : str = ''):
                                          )
 
     return UNet(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
-                fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                fecg_down_params=(VALUE_DOWN_PLANES, VALUE_DOWN_KERNELS, VALUE_DOWN_STRIDES),
                 fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                 batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                 decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
@@ -89,33 +89,33 @@ def make_wnet(path : str = ''):
     if path:
         return WNet.load_from_checkpoint(path,
                                          sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
-                                         fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                                         fecg_down_params=(VALUE_DOWN_PLANES, VALUE_DOWN_KERNELS, VALUE_DOWN_STRIDES),
                                          fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
-                                         mecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                                         mecg_down_params=(VALUE_DOWN_PLANES, VALUE_DOWN_KERNELS, VALUE_DOWN_STRIDES),
                                          mecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                                          batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                                          )
 
     return WNet(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
-                fecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                fecg_down_params=(VALUE_DOWN_PLANES, VALUE_DOWN_KERNELS, VALUE_DOWN_STRIDES),
                 fecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
-                mecg_down_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                mecg_down_params=(VALUE_DOWN_PLANES, VALUE_DOWN_KERNELS, VALUE_DOWN_STRIDES),
                 mecg_up_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
-                batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,)
+                batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE, )
 
 def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
     print('=====Making FECGMem Model=====')
     if path:
         return FECGMem.load_from_checkpoint(path,
                                             sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
-                                            query_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
-                                            value_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                                            query_encoder_params=(MEMORY_DOWN_PLANES, MEMORY_DOWN_KERNELS, MEMORY_DOWN_STRIDES),
+                                            value_encoder_params=(VALUE_DOWN_PLANES, VALUE_DOWN_KERNELS, VALUE_DOWN_STRIDES),
                                             decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                                             embed_dim=EMBED_DIM, memory_length=MEMORY_LENGTH,
                                             batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                                             window_length=WINDOW_LENGTH, pretrained_unet = None,
                                             decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
-                                            linear_layers=LINEAR_LAYERS,  pad_length=PAD_LENGTH,
+                                            linear_layers=LINEAR_LAYERS, pad_length=PAD_LENGTH,
                                             )
 
     if unet_path:
@@ -124,14 +124,14 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
         pretrained_unet = None
 
     return FECGMem(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
-                   query_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
-                   value_encoder_params=(DOWN_PLANES, DOWN_KERNELS, DOWN_STRIDES),
+                   query_encoder_params=(MEMORY_DOWN_PLANES, MEMORY_DOWN_KERNELS, MEMORY_DOWN_STRIDES),
+                   value_encoder_params=(VALUE_DOWN_PLANES, VALUE_DOWN_KERNELS, VALUE_DOWN_STRIDES),
                    decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
                    embed_dim=EMBED_DIM, memory_length=MEMORY_LENGTH,
                    batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE, window_length=WINDOW_LENGTH,
                    pretrained_unet=pretrained_unet, decoder_skips=SKIP,
                    initial_conv_planes=INITIAL_CONV_PLANES, linear_layers=LINEAR_LAYERS,
-                   pad_length=PAD_LENGTH,)
+                   pad_length=PAD_LENGTH, )
 
 def main(**kwargs):
     tb_logger = TensorBoardLogger(save_dir=LOG_DIR, name=MODEL_NAME)
