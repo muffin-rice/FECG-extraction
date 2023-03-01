@@ -12,7 +12,8 @@ class FECGMem(pl.LightningModule):
     def __init__(self, sample_ecg, window_length, query_encoder_params : ((int,),), embed_dim : int,
                  value_encoder_params : ((int,),), decoder_params : ((int,),), memory_length : int,
                  batch_size : int, learning_rate : float, loss_ratios : {str : int}, pretrained_unet : UNet,
-                 decoder_skips : bool, initial_conv_planes : int, linear_layers : (int,), pad_length : int):
+                 decoder_skips : bool, initial_conv_planes : int, linear_layers : (int,), pad_length : int,
+                 peak_downsamples : int):
         super().__init__()
         self.window_length = window_length
         if pretrained_unet is not None:
@@ -31,7 +32,8 @@ class FECGMem(pl.LightningModule):
             self.value_decoder = Decoder(decoder_params, head_params=('tanh',), skips=decoder_skips)
             self.value_encoder = Encoder(value_encoder_params)
             self.fecg_peak_head = PeakHead(starting_planes=embed_dim, ending_planes=initial_conv_planes,
-                                           hidden_layers=linear_layers, output_length=pad_length)
+                                           hidden_layers=linear_layers, output_length=pad_length,
+                                           num_downsampling=peak_downsamples)
             self.value_key_proj = KeyProjector(value_encoder_params[0][-1], embed_dim)
             self.value_unprojer = KeyProjector(embed_dim, decoder_params[0][0])
 

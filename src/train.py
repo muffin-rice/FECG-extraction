@@ -73,7 +73,7 @@ def make_unet(path : str = ''):
                                          batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                                          decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
                                          linear_layers=LINEAR_LAYERS, pad_length=PAD_LENGTH,
-                                         embed_dim=EMBED_DIM
+                                         embed_dim=EMBED_DIM, peak_downsamples=PEAK_DOWNSAMPLES,
                                          )
 
     return UNet(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
@@ -82,7 +82,7 @@ def make_unet(path : str = ''):
                 batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
                 decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
                 linear_layers=LINEAR_LAYERS, pad_length=PAD_LENGTH,
-                embed_dim=EMBED_DIM)
+                embed_dim=EMBED_DIM, peak_downsamples=PEAK_DOWNSAMPLES,)
 
 def make_wnet(path : str = ''):
     print('=====Making WNet Model=====')
@@ -116,6 +116,7 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                                             window_length=WINDOW_LENGTH, pretrained_unet = None,
                                             decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
                                             linear_layers=LINEAR_LAYERS, pad_length=PAD_LENGTH,
+                                            peak_downsamples=PEAK_DOWNSAMPLES,
                                             )
 
     if unet_path:
@@ -131,7 +132,7 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                    batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE, window_length=WINDOW_LENGTH,
                    pretrained_unet=pretrained_unet, decoder_skips=SKIP,
                    initial_conv_planes=INITIAL_CONV_PLANES, linear_layers=LINEAR_LAYERS,
-                   pad_length=PAD_LENGTH, )
+                   pad_length=PAD_LENGTH, peak_downsamples=PEAK_DOWNSAMPLES,)
 
 def main(**kwargs):
     tb_logger = TensorBoardLogger(save_dir=LOG_DIR, name=MODEL_NAME)

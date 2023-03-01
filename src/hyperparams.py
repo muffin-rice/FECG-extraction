@@ -40,6 +40,8 @@ parser.add_argument('--initial_conv', type=int, default=2,
                     help='number of planes in initial conv for peak index pred')
 parser.add_argument('--linear_layers', type=int, default=(108, 128), nargs='+',
                     help='tuple of linear layers for the peak index pred')
+parser.add_argument('--peakhead_downsamples', type=int, default=3,
+                    help='number of downsamples to use in peakhead')
 parser.add_argument('--key_dim', type=int, default=128,
                     help='key dimension')
 parser.add_argument('--val_dim', type=int, default=128,
@@ -148,8 +150,10 @@ UP_KERNELS = tuple(args.up_kernels)
 UP_STRIDES = tuple(args.up_strides)
 assert len(UP_PLANES) == len(VALUE_DOWN_PLANES)
 SKIP = args.skips
+# peak head parameters
 INITIAL_CONV_PLANES = args.initial_conv
 LINEAR_LAYERS = tuple(args.linear_layers)
+PEAK_DOWNSAMPLES = args.peakhead_downsamples
 # attention hyperparameters
 WINDOW_LENGTH = args.window_length
 MEMORY_LENGTH = args.memory_length

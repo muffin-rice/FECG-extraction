@@ -7,7 +7,8 @@ from .losses import *
 class UNet(pl.LightningModule):
     def __init__(self, sample_ecg : torch.Tensor, learning_rate : float, fecg_down_params : ((int,),),
                  fecg_up_params : ((int,),), loss_ratios : {str : int}, batch_size : int, decoder_skips : bool,
-                 initial_conv_planes : int, linear_layers : (int,), pad_length : int, embed_dim : int):
+                 initial_conv_planes : int, linear_layers : (int,), pad_length : int, embed_dim : int,
+                 peak_downsamples : int):
         # params in the format ((num_planes), (kernel_width), (stride))
         super().__init__()
 
@@ -23,7 +24,8 @@ class UNet(pl.LightningModule):
         self.value_unprojer = KeyProjector(embed_dim, fecg_up_params[0][0])
 
         self.fecg_peak_head = PeakHead(starting_planes=embed_dim, ending_planes=initial_conv_planes,
-                                       hidden_layers=linear_layers, output_length=pad_length)
+                                       hidden_layers=linear_layers, output_length=pad_length,
+                                       num_downsampling=peak_downsamples)
 
         self.loss_params, self.batch_size = loss_ratios, batch_size
         # change dtype
