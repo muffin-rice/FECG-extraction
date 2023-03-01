@@ -135,8 +135,15 @@ class FECGMem(pl.LightningModule):
         dot_similarity = torch.bmm(key_memory.transpose(1, 2), query)
         return dot_similarity
 
-    def compute_l2_similarity(self, query, key_memory):
-        pass
+    def compute_l2_similarity(self, query, key_memory) -> torch.Tensor:
+        # computes the l2 similarity between query and key_memory
+        # l2 similarity is defined as ||query - key_memory||^2 (result B x L*W x L)
+
+        # get the decomposition
+        dot = 2 * torch.bmm(key_memory.transpose(1,2), query) # B x L*W x L
+        l2 = dot - torch.square(torch.sum(key_memory, dim=2))
+
+        return l2
 
     def softmax_affinity(self, affinity : torch.Tensor) -> torch.Tensor:
         '''softmaxes affinity matrix S across second dimension
@@ -321,6 +328,6 @@ class FECGMem(pl.LightningModule):
 
     def print_summary(self, depth = 7):
         from torchinfo import summary
-        random_input = torch.rand((self.batch_size, 1, 250))
+        random_input = torch.rand((self.batch_size, 5, 250))
         self.peak_shape = (self.batch_size, 5, self.pad_length)
         return summary(self, input_data=random_input, depth=depth)
