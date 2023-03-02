@@ -146,10 +146,10 @@ class PeakHead(nn.Module):
                  num_downsampling : int):
         super().__init__()
 
-        initial_conv = self.downsampler(starting_planes, ending_planes, 5, 0, 2)
+        initial_conv = self.downsampler(starting_planes, ending_planes, 3, 0, 2)
 
         for i in range(num_downsampling-1):
-            initial_conv += self.downsampler(ending_planes, ending_planes, 5, 0, 2)
+            initial_conv += self.downsampler(ending_planes, ending_planes, 3, 0, 2)
 
         # if ending_planes:
         #     initial_conv.append(nn.Conv1d(ending_planes, ending_planes, kernel_size=1, padding=0))

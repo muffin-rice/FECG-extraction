@@ -56,13 +56,13 @@ class FECGMem(pl.LightningModule):
 
     def encode_value(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
         '''encodes the value, returns the encoded value with projection (if any) and the skips'''
-        assert segment.shape[2] == self.window_length
+        assert segment.shape[2] == self.window_length, f'Window len misaligned: {segment.shape}, {self.window_length}'
         encoded_values = self.value_encoder(segment)
         return encoded_values[-1], encoded_values
 
     def encode_query(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
         '''gets the encoded key given aecg segment'''
-        assert segment.shape[2] == self.window_length
+        assert segment.shape[2] == self.window_length, f'Window len misaligned: {segment.shape}, {self.window_length}'
         encoded_key = self.key_encoder(segment)
         return encoded_key[-1], encoded_key
 
@@ -73,16 +73,16 @@ class FECGMem(pl.LightningModule):
         return initial_guess
 
     def get_key_memory(self) -> torch.Tensor:
-        '''returns value memory in shape of B x key_dim x memory_length*planes'''
+        '''returns value memory in shape of B x QK x N*P'''
         return self.key_memory
 
     def get_value_memory(self) -> torch.Tensor:
-        '''returns value memory in shape of B x val_dim x memory_length*planes'''
+        '''returns value memory in shape of B x Vk x N*P'''
         return self.value_memory
 
     def _initialize_memory(self, memory_key : torch.Tensor, memory_value : torch.Tensor):
         '''initializes the key and value memories
-        memory has shape B x key_dim x memory_length * planes (features)'''
+        memory has shape B x K x N * P'''
         assert self.memory_initialized is False
         # inputs are B x C x W
         self.key_memory = torch.zeros((self.batch_size, self.embed_dim, self.memory_length * memory_key.shape[2])).to(self.device)
@@ -95,7 +95,7 @@ class FECGMem(pl.LightningModule):
 
     def add_to_memory(self, memory_value : torch.Tensor, memory_key : torch.Tensor):
         '''adds value/key to memory'''
-        # TODO: better way of adding to memory
+        # TODO: module that handles memory adding
         if self.memory_iteration < self.memory_length:
             self.key_memory[:, :, self.memory_iteration: self.memory_iteration + memory_key.shape[2]] = memory_key
             self.value_memory[:, :, self.memory_iteration: self.memory_iteration + memory_value.shape[2]] = memory_value
@@ -118,14 +118,14 @@ class FECGMem(pl.LightningModule):
 
         memory_value = self.get_value_memory()
 
-        assert memory_value.shape[2] == softmax_aff.shape[1]
+        assert memory_value.shape[2] == softmax_aff.shape[1], f'Shapes misaligned: {memory_value.shape}, {softmax_aff.shape}'
 
         memval_softmaxed = torch.bmm(memory_value, softmax_aff)
 
         return memval_softmaxed
 
     def compute_cosine_similarity(self, query, key_memory, order=2) -> torch.Tensor:
-        assert query.shape[1] == key_memory.shape[1]
+        assert query.shape[1] == key_memory.shape[1], f'Shapes misaligned: {query.shape}, {key_memory.shape}'
         dot = torch.bmm(key_memory.transpose(1,2), query)
         mag_query = torch.norm(query, dim=[1,2], p=order).view(query.shape[0], 1, 1)
         mag_keymem = torch.norm(key_memory, dim=[1,2], p=order).view(query.shape[0], 1, 1)
@@ -133,7 +133,7 @@ class FECGMem(pl.LightningModule):
         return cosine_similarity
 
     def compute_dot_similarity(self, query, key_memory) -> torch.Tensor:
-        assert query.shape[1] == key_memory.shape[1]
+        assert query.shape[1] == key_memory.shape[1], f'Shapes misaligned: {query.shape}, {key_memory.shape}'
         dot_similarity = torch.bmm(key_memory.transpose(1, 2), query)
         return dot_similarity
 
@@ -156,8 +156,8 @@ class FECGMem(pl.LightningModule):
     def compute_affinity(self, query : torch.Tensor) -> torch.Tensor:
         '''computes affinity between current query and key in memory
         currently uses dot product
-        output is B x Qk * NQk'''
-        # input is B x Ck x W, output is B x L*W x W
+        output is B x Qk x NQk'''
+        # input is B x Ck x W, output is B x Qk x NQk
         key_memory = self.get_key_memory()
         return self.compute_cosine_similarity(query, key_memory) / sqrt(self.embed_dim)
 
@@ -330,6 +330,6 @@ class FECGMem(pl.LightningModule):
 
     def print_summary(self, depth = 7):
         from torchinfo import summary
-        random_input = torch.rand((self.batch_size, 5, 250))
-        self.peak_shape = (self.batch_size, 5, self.pad_length)
+        random_input = torch.rand((self.batch_size, 5, 250)) # window len 5 will make summary long, change to 1 if too long
+        self.peak_shape = (self.batch_size, 1, self.pad_length) # only a single peak for the entire window
         return summary(self, input_data=random_input, depth=depth)
