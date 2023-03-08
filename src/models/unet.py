@@ -1,7 +1,7 @@
 import torch
 from torch import nn, optim
 import pytorch_lightning as pl
-from .network_modules import Encoder, Decoder, PeakHead, KeyProjector
+from .network_modules import Encoder, Decoder, KeyProjector#, PeakHead
 from .losses import *
 
 class UNet(pl.LightningModule):
@@ -17,15 +17,15 @@ class UNet(pl.LightningModule):
 
         self.fecg_encode = Encoder(fecg_down_params)
 
-        self.fecg_decode = Decoder(fecg_up_params, ('tanh',), skips=decoder_skips)
+        self.fecg_decode = Decoder(fecg_up_params, ('tanh', 'sigmoid'), skips=decoder_skips)
 
         # for pretraining purposes, otherwise is just another conv layer
         self.value_key_proj = KeyProjector(fecg_down_params[0][-1], embed_dim)
         self.value_unprojer = KeyProjector(embed_dim, fecg_up_params[0][0])
 
-        self.fecg_peak_head = PeakHead(starting_planes=embed_dim, ending_planes=initial_conv_planes,
-                                       hidden_layers=linear_layers, output_length=pad_length,
-                                       num_downsampling=peak_downsamples)
+        # self.fecg_peak_head = PeakHead(starting_planes=embed_dim, ending_planes=initial_conv_planes,
+        #                                hidden_layers=linear_layers, output_length=pad_length,
+        #                                num_downsampling=peak_downsamples)
 
         self.loss_params, self.batch_size = loss_ratios, batch_size
         # change dtype
@@ -33,21 +33,25 @@ class UNet(pl.LightningModule):
 
     def loss_function(self, results):
         # return all the losses with hyperparameters defined earlier
-        return self.loss_params['fecg'] * torch.sum(results['loss_fecg_mse']) / self.batch_size +\
-               self.loss_params['fecg_peak'] * torch.sum(results['loss_peaks_mse']) / self.batch_size
+        return self.loss_params['fecg'] * torch.sum(results['loss_fecg_mse']) / self.batch_size + \
+               self.loss_params['fecg_peak'] * torch.sum(results['loss_peaks_bce']) / self.batch_size + \
+               self.loss_params['fecg_peak_mask'] * self.loss_params['fecg_peak'] * torch.sum(results['loss_peaks_bce_masked']) / self.batch_size
+               # self.loss_params['fecg_peak'] * torch.sum(results['loss_peaks_mse']) / self.batch_size
 
     def calculate_losses_into_dict(self, recon_fecg: torch.Tensor, gt_fecg: torch.Tensor, recon_peaks: torch.Tensor,
                                    gt_fetal_peaks: torch.Tensor) -> {str: torch.Tensor}:
-        # If necessary: peak-weighted losses, class imablance in BCE loss
+
+        assert torch.any(gt_fetal_peaks > 0)
 
         fecg_loss_mse = calc_mse(recon_fecg, gt_fecg)
-        # fecg_mask_loss_bce = calc_bce_loss(recon_binary_fetal_mask, gt_binary_fetal_mask)
+        fecg_mask_loss_bce = calc_bce_loss(recon_peaks, gt_fetal_peaks)
         # masked loss to weigh peaks on the bce loss
-        # fecg_mask_loss_masked_bce = calc_bce_loss(recon_binary_fetal_mask * gt_binary_fetal_mask, gt_binary_fetal_mask)
+        fecg_mask_loss_masked_bce = calc_bce_loss(recon_peaks * gt_fetal_peaks, gt_fetal_peaks)
 
-        peak_loss_mse = calc_mse(recon_peaks, gt_fetal_peaks)
+        # peak_loss_mse = calc_mse(recon_peaks, gt_fetal_peaks)
 
-        aggregate_loss = {'loss_fecg_mse': fecg_loss_mse, 'loss_peaks_mse': peak_loss_mse}
+        aggregate_loss = {'loss_fecg_mse': fecg_loss_mse, 'loss_peaks_bce': fecg_mask_loss_bce,
+                          'loss_peaks_bce_masked' : fecg_mask_loss_masked_bce}
 
         loss_dict = {}
 
@@ -85,10 +89,11 @@ class UNet(pl.LightningModule):
         value_proj = self.value_key_proj(fecg_encode_outs[-1])
         value_unproj = self.value_unprojer(value_proj)
 
-        (fecg_recon,), _ = self.fecg_decode(value_unproj, None)
+        (fecg_recon, fecg_peak_recon), _ = self.fecg_decode(value_unproj, None)
         fecg_recon = fecg_recon[:,:,:aecg_sig.shape[2]]
+        fecg_peak_recon = fecg_peak_recon[:, :, :aecg_sig.shape[2]]
 
-        fecg_peak_recon = self.fecg_peak_head(value_proj)
+        # fecg_peak_recon = self.fecg_peak_head(value_proj)
 
         return {'fecg_recon' : fecg_recon, 'fecg_peak_recon' : fecg_peak_recon}
 
@@ -97,7 +102,7 @@ class UNet(pl.LightningModule):
         model_outputs = self.forward(d['aecg_sig'])
 
         loss_dict = self.calculate_losses_into_dict(model_outputs['fecg_recon'], d['fecg_sig'],
-                                                    model_outputs['fecg_peak_recon'], d['fecg_peaks'])
+                                                    model_outputs['fecg_peak_recon'], d['binary_fetal_mask'])
 
         self.log_dict({f'train_{k}': v for k, v in loss_dict.items()}, sync_dist=True, batch_size=self.batch_size)
 
@@ -108,7 +113,7 @@ class UNet(pl.LightningModule):
         model_outputs = self.forward(d['aecg_sig'])
 
         loss_dict = self.calculate_losses_into_dict(model_outputs['fecg_recon'], d['fecg_sig'],
-                                                    model_outputs['fecg_peak_recon'], d['fecg_peaks'])
+                                                    model_outputs['fecg_peak_recon'], d['binary_fetal_mask'])
 
         self.log_dict({f'val_{k}': v for k, v in loss_dict.items()}, sync_dist=True, batch_size=self.batch_size)
         model_outputs.update(loss_dict)
@@ -120,7 +125,7 @@ class UNet(pl.LightningModule):
         model_outputs = self.forward(d['aecg_sig'])
 
         loss_dict = self.calculate_losses_into_dict(model_outputs['fecg_recon'], d['fecg_sig'],
-                                                    model_outputs['fecg_peak_recon'], d['fecg_peaks'])
+                                                    model_outputs['fecg_peak_recon'], d['binary_fetal_mask'])
 
         model_outputs.update(loss_dict)
 

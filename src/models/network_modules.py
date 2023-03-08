@@ -140,43 +140,43 @@ class KeyProjector(nn.Module):
         # TODO: shrinkage and selection
         return self.key_proj(x)
 
-class PeakHead(nn.Module):
-    '''Downsample sequence further, then flatten and perform regression'''
-    def __init__(self, starting_planes : int, ending_planes : int, hidden_layers : (int,), output_length : int,
-                 num_downsampling : int):
-        super().__init__()
-
-        initial_conv = self.downsampler(starting_planes, ending_planes, 3, 0, 2)
-
-        for i in range(num_downsampling-1):
-            initial_conv += self.downsampler(ending_planes, ending_planes, 3, 0, 2)
-
-        # if ending_planes:
-        #     initial_conv.append(nn.Conv1d(ending_planes, ending_planes, kernel_size=1, padding=0))
-        #     initial_conv.append(nn.BatchNorm1d(ending_planes))
-
-        self.initial_conv = nn.Sequential(*initial_conv[:-1])
-
-        self.flatten = nn.Flatten()
-        linears = [nn.LeakyReLU(negative_slope=0.1)]
-
-        for i in range(len(hidden_layers) - 1):
-            linears.append(nn.Linear(hidden_layers[i], hidden_layers[i+1]))
-            linears.append(nn.LeakyReLU(negative_slope=0.1))
-
-        linears.append(nn.Linear(hidden_layers[-1], output_length))
-        linears.append(nn.ReLU())
-
-        self.linears = nn.Sequential(*linears)
-
-    def downsampler(self, starting_planes, ending_planes, k, p, s):
-        return [
-            nn.Conv1d(starting_planes, ending_planes, kernel_size=k, padding=p, stride=s),
-            nn.BatchNorm1d(ending_planes),
-            nn.LeakyReLU(negative_slope=0.1)
-        ]
-
-    def forward(self, x):
-        x = self.initial_conv(x)
-        x = self.flatten(x)
-        return self.linears(x)
+# class PeakHead(nn.Module):
+#     '''Downsample sequence further, then flatten and perform regression'''
+#     def __init__(self, starting_planes : int, ending_planes : int, hidden_layers : (int,), output_length : int,
+#                  num_downsampling : int):
+#         super().__init__()
+#
+#         initial_conv = self.downsampler(starting_planes, ending_planes, 3, 0, 2)
+#
+#         for i in range(num_downsampling-1):
+#             initial_conv += self.downsampler(ending_planes, ending_planes, 3, 0, 2)
+#
+#         # if ending_planes:
+#         #     initial_conv.append(nn.Conv1d(ending_planes, ending_planes, kernel_size=1, padding=0))
+#         #     initial_conv.append(nn.BatchNorm1d(ending_planes))
+#
+#         self.initial_conv = nn.Sequential(*initial_conv[:-1])
+#
+#         self.flatten = nn.Flatten()
+#         linears = [nn.LeakyReLU(negative_slope=0.1)]
+#
+#         for i in range(len(hidden_layers) - 1):
+#             linears.append(nn.Linear(hidden_layers[i], hidden_layers[i+1]))
+#             linears.append(nn.LeakyReLU(negative_slope=0.1))
+#
+#         linears.append(nn.Linear(hidden_layers[-1], output_length))
+#         linears.append(nn.ReLU())
+#
+#         self.linears = nn.Sequential(*linears)
+#
+#     def downsampler(self, starting_planes, ending_planes, k, p, s):
+#         return [
+#             nn.Conv1d(starting_planes, ending_planes, kernel_size=k, padding=p, stride=s),
+#             nn.BatchNorm1d(ending_planes),
+#             nn.LeakyReLU(negative_slope=0.1)
+#         ]
+#
+#     def forward(self, x):
+#         x = self.initial_conv(x)
+#         x = self.flatten(x)
+#         return self.linears(x)

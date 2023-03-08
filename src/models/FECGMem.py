@@ -2,7 +2,7 @@ import torch
 from torch import nn, optim
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from .network_modules import Encoder, KeyProjector, Decoder, PeakHead
+from .network_modules import Encoder, KeyProjector, Decoder#, PeakHead
 from numpy import sqrt
 from .losses import *
 from .unet import UNet
@@ -19,7 +19,7 @@ class FECGMem(pl.LightningModule):
         if pretrained_unet is not None:
             self.value_encoder = pretrained_unet.fecg_encode
             self.value_decoder = pretrained_unet.fecg_decode
-            self.fecg_peak_head = pretrained_unet.fecg_peak_head
+            # self.fecg_peak_head = pretrained_unet.fecg_peak_head
             self.value_key_proj = pretrained_unet.value_key_proj
             self.value_unprojer = pretrained_unet.value_unprojer
 
@@ -29,11 +29,11 @@ class FECGMem(pl.LightningModule):
 
             print('Using pretrained value encoder/decoder')
         else:
-            self.value_decoder = Decoder(decoder_params, head_params=('tanh',), skips=decoder_skips)
+            self.value_decoder = Decoder(decoder_params, head_params=('tanh', 'sigmoid'), skips=decoder_skips)
             self.value_encoder = Encoder(value_encoder_params)
-            self.fecg_peak_head = PeakHead(starting_planes=embed_dim, ending_planes=initial_conv_planes,
-                                           hidden_layers=linear_layers, output_length=pad_length,
-                                           num_downsampling=peak_downsamples)
+            # self.fecg_peak_head = PeakHead(starting_planes=embed_dim, ending_planes=initial_conv_planes,
+            #                                hidden_layers=linear_layers, output_length=pad_length,
+            #                                num_downsampling=peak_downsamples)
             self.value_key_proj = KeyProjector(value_encoder_params[0][-1], embed_dim)
             self.value_unprojer = KeyProjector(embed_dim, decoder_params[0][0])
 
@@ -161,23 +161,28 @@ class FECGMem(pl.LightningModule):
         key_memory = self.get_key_memory()
         return self.compute_cosine_similarity(query, key_memory) / sqrt(self.embed_dim)
 
-    def loss_function(self, results) -> torch.Tensor:
+    def loss_function(self, results):
         # return all the losses with hyperparameters defined earlier
-        return self.loss_params['fecg'] * torch.sum(results['loss_fecg_mse']) / self.batch_size +\
-               self.loss_params['fecg_peak'] * torch.sum(results['loss_peaks_mse']) / self.batch_size
+        return self.loss_params['fecg'] * torch.sum(results['loss_fecg_mse']) / self.batch_size + \
+               self.loss_params['fecg_peak'] * torch.sum(results['loss_peaks_bce']) / self.batch_size + \
+               self.loss_params['fecg_peak_mask'] * self.loss_params['fecg_peak'] * torch.sum(results['loss_peaks_bce_masked']) / self.batch_size
+        # self.loss_params['fecg_peak'] * torch.sum(results['loss_peaks_mse']) / self.batch_size
 
     def calculate_losses_into_dict(self, recon_fecg: torch.Tensor, gt_fecg: torch.Tensor, recon_peaks: torch.Tensor,
                                    gt_fetal_peaks: torch.Tensor) -> {str: torch.Tensor}:
         # If necessary: peak-weighted losses, class imablance in BCE loss
 
+        assert torch.any(gt_fetal_peaks > 0), 'The binary fetal mask is all zeros.'
+
         fecg_loss_mse = calc_mse(recon_fecg, gt_fecg)
-        # fecg_mask_loss_bce = calc_bce_loss(recon_binary_fetal_mask, gt_binary_fetal_mask)
+        fecg_mask_loss_bce = calc_bce_loss(recon_peaks, gt_fetal_peaks)
         # masked loss to weigh peaks on the bce loss
-        # fecg_mask_loss_masked_bce = calc_bce_loss(recon_binary_fetal_mask * gt_binary_fetal_mask, gt_binary_fetal_mask)
+        fecg_mask_loss_masked_bce = calc_bce_loss(recon_peaks * gt_fetal_peaks, gt_fetal_peaks)
 
-        peak_loss_mse = calc_mse(recon_peaks, gt_fetal_peaks)
+        # peak_loss_mse = calc_mse(recon_peaks, gt_fetal_peaks)
 
-        aggregate_loss = {'loss_fecg_mse': fecg_loss_mse, 'loss_peaks_mse': peak_loss_mse}
+        aggregate_loss = {'loss_fecg_mse': fecg_loss_mse, 'loss_peaks_bce': fecg_mask_loss_bce,
+                          'loss_peaks_bce_masked': fecg_mask_loss_masked_bce}
 
         loss_dict = {}
 
@@ -192,7 +197,8 @@ class FECGMem(pl.LightningModule):
     def forward(self, aecg_sig : torch.Tensor) -> {str : torch.Tensor}:
         '''data in the format of B x num_windows (set at 100 during training) x window_size'''
         fecg_recon = torch.zeros_like(aecg_sig).to(self.device)
-        fecg_peak_recon = torch.zeros(self.peak_shape).to(self.device)
+        fecg_peak_recon = torch.zeros_like(aecg_sig).to(self.device)
+        # fecg_peak_recon = torch.zeros(self.peak_shape).to(self.device)
 
         # get initial guess and initialize memory
         initial_aecg_segment = aecg_sig[:, [0], :]
@@ -206,8 +212,9 @@ class FECGMem(pl.LightningModule):
         memory_value = self.retrieve_memory_value(query_proj)
         initial_guess = self.decode_value(memory_value, initial_value_outs)
 
-        fecg_peak_recon[:,0,:] = self.fecg_peak_head(value_proj)
+        # fecg_peak_recon[:,0,:] = self.fecg_peak_head(value_proj)
         fecg_recon[:, 0, :] = initial_guess[0][:, 0, :self.window_length]
+        fecg_peak_recon[:, 0, :] = initial_guess[1][:, 0, :self.window_length]
 
         for i in range(aecg_sig.shape[1]):
             if i == 0:
@@ -225,8 +232,9 @@ class FECGMem(pl.LightningModule):
             memory_value = self.retrieve_memory_value(query_proj)
             guess = self.decode_value(memory_value, value_outs)
 
-            fecg_peak_recon[:, i, :] = self.fecg_peak_head(memory_value)
+            # fecg_peak_recon[:, i, :] = self.fecg_peak_head(memory_value)
             fecg_recon[:,i,:] = guess[0][:, 0, :self.window_length]
+            fecg_peak_recon[:,i,:] = guess[1][:, 0, :self.window_length]
 
         # TODO: abolish memory
         self.memory_initialized = False
@@ -239,7 +247,7 @@ class FECGMem(pl.LightningModule):
 
         # get initial guess and initialize memory
         initial_aecg_segment = aecg_sig[:, [0], :]
-        initial_value, initial_value_outs = self.encode_value(initial_aecg_segment)
+        initial_value, value_outs = self.encode_value(initial_aecg_segment)
         initial_query, _ = self.encode_query(initial_aecg_segment)
 
         value_proj = self.value_key_proj(initial_value)
@@ -259,12 +267,13 @@ class FECGMem(pl.LightningModule):
             query_proj = self.query_key_proj(query)
             self.add_to_memory(query_proj, value_proj)
 
-            if i == aecg_sig.shape[1] - 1:
-                memory_value = self.retrieve_memory_value(query_proj)
-                guess = self.decode_value(memory_value, value_outs)
+        else:
+            memory_value = self.retrieve_memory_value(query_proj)
+            guess = self.decode_value(memory_value, value_outs)
 
-                fecg_peak_recon = self.fecg_peak_head(memory_value)
-                fecg_recon = guess[0][:,0,:self.window_length]
+            # fecg_peak_recon = self.fecg_peak_head(memory_value)
+            fecg_recon = guess[0][:, 0, :self.window_length]
+            fecg_peak_recon = guess[1][:, 0, :self.window_length]
 
         # TODO: abolish memory
         self.memory_initialized = False
@@ -283,11 +292,19 @@ class FECGMem(pl.LightningModule):
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
         # performs backwards on the last segment only to avoid inplace operations with the masking
-        self.peak_shape = d['fecg_peaks'].shape
+        # self.peak_shape = d['fecg_peaks'].shape
         model_output = self.train_forward(aecg_sig)
 
-        loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'][:,-1,:],
-                                                    model_output['fecg_peak_recon'], d['fecg_peaks'][:,-1,:])
+        try:
+            loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'][:, -1, :],
+                                                        model_output['fecg_peak_recon'],
+                                                        d['binary_fetal_mask'][:, -1, :])  # d['fecg_peaks'][:,-1,:])
+        except Exception as e:
+            print(f'{d["fname"]} failed somehow:')
+            import pickle as pkl
+            with open('dev/fails.pkl', 'wb') as f:
+                pkl.dump(d, f)
+            raise e
 
         self.log_dict({f'train_{k}': v for k, v in loss_dict.items()}, sync_dist=True, batch_size=self.batch_size)
 
@@ -298,11 +315,11 @@ class FECGMem(pl.LightningModule):
         self.memory_initialized = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
-        self.peak_shape = d['fecg_peaks'].shape
+        # self.peak_shape = d['fecg_peaks'].shape
         model_output = self.forward(aecg_sig)
 
         loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'],
-                                                    model_output['fecg_peak_recon'], d['fecg_peaks'])
+                                                    model_output['fecg_peak_recon'],  d['binary_fetal_mask']) # d['fecg_peaks'])
 
         self.log_dict({f'val_{k}': v for k, v in loss_dict.items()}, sync_dist=True, batch_size=self.batch_size)
         model_output.update(loss_dict)
@@ -314,11 +331,11 @@ class FECGMem(pl.LightningModule):
         self.memory_initialized = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
-        self.peak_shape = d['fecg_peaks'].shape
+        # self.peak_shape = d['fecg_peaks'].shape
         model_output = self.forward(aecg_sig)
 
         loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'],
-                                                    model_output['fecg_peak_recon'], d['fecg_peaks'])
+                                                    model_output['fecg_peak_recon'], d['binary_fetal_mask']) # d['fecg_peaks'])
 
         model_output.update(loss_dict)
 
@@ -331,5 +348,5 @@ class FECGMem(pl.LightningModule):
     def print_summary(self, depth = 7):
         from torchinfo import summary
         random_input = torch.rand((self.batch_size, 5, 250)) # window len 5 will make summary long, change to 1 if too long
-        self.peak_shape = (self.batch_size, 1, self.pad_length) # only a single peak for the entire window
+        self.peak_shape = (self.batch_size, 5, self.pad_length) # only a single peak for the entire window
         return summary(self, input_data=random_input, depth=depth)
