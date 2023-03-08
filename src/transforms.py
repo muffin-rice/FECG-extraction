@@ -24,10 +24,10 @@ def calc_peak_mask(sig : np.array, num_windows : int, peak_window = PEAK_SCALE, 
 
     for peak in peaks:
         peak = int(peak)
-        if peak >= WINDOW_LENGTH*num_windows:
+        if peak >= len(sig):
             break
-        left, right = peak-int(peak_window/2), peak+int(peak_window/2)+1
-        peak_mask[left : right] = gauss_kernel(peak_window, peak_sigma)[:len(peak_mask[left : right])]
+        left, right = max(peak-int(peak_window/2), 0), min(peak+int(peak_window/2)+1, len(sig))
+        peak_mask[left : right] = gauss_kernel(peak_window, peak_sigma)[:right-left] # kernel slightly bugged on edges
 
         binary_peak_mask[peak] = 1
 
@@ -59,51 +59,36 @@ class Transforms:
     def __init__(self):
         # filtering
         self.transforms = []
+        self.transform_dictionary = {
+            'transform_keys' : self.perform_transforms,
+            'downsample' : self.downsample,
+            'filter' : self.filter,
+            'remove_bad_keys' : self.remove_bad_keys,
+            'duplicate_keys' : self.duplicate_keys,
+            'perform_trim' : self.perform_trim,
+            'resample' : self.resample_signal,
+            'get_signal_masks' : self.get_signal_masks,
+            'reshape_keys' : self.reshape_keys,
+            'reshape_peaks' : self.reshape_peaks,
+            'check_signal_shape' : self.check_signal_shape,
+            'add_noise_signal' : self.add_noise_signal,
+            'scale_segment' : self.scale_segment,
+            'scale_multiple_segments' : self.scale_multiple_segments,
+            'pop_keys' : self.pop_keys,
+            'check_nans' : self.check_nans,
+            'print_keys' : self.print_keys,
+            'correct_peaks' : self.correct_peaks,
+            'change_dtype' : self.change_dtype,
+            'add_to_dict' : self.add_to_dict,
+            'assert_nonzero' : self.assert_nonzero,
+            'assert_nonzero2' : self.assert_nonzero2,
+        }
 
     def add_transform(self, transform_name : str, transform_params : (any,)):
-        # TODO: use dict mapping instead of ifs
-        if transform_name == 'transform_keys':
-            self.transforms.append((self.perform_transforms, None))
-        elif transform_name == 'downsample':
-            self.transforms.append((self.downsample, transform_params))
-        elif transform_name == 'filter':
-            self.transforms.append((self.filter, transform_params))
-        elif transform_name == 'remove_bad_keys':
-            self.transforms.append((self.remove_bad_keys, None))
-        elif transform_name == 'duplicate_keys':
-            self.transforms.append((self.duplicate_keys, transform_params))
-        elif transform_name == 'perform_trim':
-            self.transforms.append((self.perform_trim, transform_params))
-        elif transform_name == 'resample':
-            self.transforms.append((self.resample_signal, transform_params))
-        elif transform_name == 'get_signal_masks':
-            self.transforms.append((self.get_signal_masks, transform_params))
-        elif transform_name == 'reshape_keys':
-            self.transforms.append((self.reshape_keys, transform_params))
-        elif transform_name == 'reshape_peaks':
-            self.transforms.append((self.reshape_peaks, transform_params))
-        elif transform_name == 'check_signal_shape':
-            self.transforms.append((self.check_signal_shape, transform_params))
-        elif transform_name == 'add_noise_signal':
-            self.transforms.append((self.add_noise_signal, transform_params))
-        elif transform_name == 'scale_segment':
-            self.transforms.append((self.scale_segment, None))
-        elif transform_name == 'scale_multiple_segments':
-            self.transforms.append((self.scale_multiple_segments, None))
-        elif transform_name == 'pop_keys':
-            self.transforms.append((self.pop_keys, transform_params))
-        elif transform_name == 'check_nans':
-            self.transforms.append((self.check_nans, transform_params))
-        elif transform_name == 'print_keys':
-            self.transforms.append((self.print_keys, transform_params))
-        elif transform_name == 'correct_peaks':
-            self.transforms.append((self.correct_peaks, transform_params))
-        elif transform_name == 'change_dtype':
-            self.transforms.append((self.change_dtype, transform_params))
-        elif transform_name == 'add_to_dict':
-            self.transforms.append((self.add_to_dict, transform_params))
+        if transform_name in self.transform_dictionary:
+            self.transforms.append((self.transform_dictionary[transform_name], transform_params))
         else:
-            raise NotImplementedError
+            raise NotImplementedError(f'Transform {transform_name} is not registered inside transform dict')
 
     def perform_transforms(self, signal_dict):
         for transform, transform_params in self.transforms:
@@ -189,6 +174,7 @@ class Transforms:
             bordered_peaks = (signal_dict[peak_key][between] - borders[0]) / WINDOW_LENGTH
             pad_amount = pad_length-bordered_peaks.shape[0]
             assert pad_amount >= 0
+            assert pad_amount < pad_length
             padded_peaks = np.pad(bordered_peaks, pad_width=(0, pad_amount), mode='constant')
             peak_locs[window,:] = padded_peaks
 
@@ -240,7 +226,7 @@ class Transforms:
 
         for key in keys_to_change:
             if 'arr' in str(type(signal_dict[key])):
-                signal_dict[key] = from_numpy(signal_dict[key]).to(dtype)
+                signal_dict[key] = from_numpy(signal_dict[key].copy()).to(dtype)
             else:
                 signal_dict[key] = torch.tensor(signal_dict[key], dtype=dtype)
 
@@ -250,3 +236,11 @@ class Transforms:
     def print_keys(self, signal_dict, *keys_to_print):
         for key in keys_to_print:
             print(f'{key} : {signal_dict[key]}')
+
+    def assert_nonzero(self, signal_dict, *keys):
+        for key in keys:
+            assert signal_dict[key].any()
+
+    def assert_nonzero2(self, signal_dict, *keys):
+        for key in keys:
+            assert signal_dict[key].any(axis=1).all()
