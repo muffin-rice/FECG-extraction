@@ -52,8 +52,10 @@ parser.add_argument('--embed_dim', type=int, default=128,
 # loss arguments
 parser.add_argument('--fecg_recon_loss', type=int, default=4,
                     help='weight factor for fecg recon')
-parser.add_argument('--fecg_peak_loss', type=int, default=1,
+parser.add_argument('--fecg_peak_loss', type=float, default=1,
                     help='weight factor for fecg peaks')
+parser.add_argument('--peak_loss_ratio', type=float, default=2,
+                    help='weight factor for peak indices on fecg')
 
 # sys arguments
 parser.add_argument('--model_name', type=str, default='unet_v1',
@@ -164,8 +166,8 @@ PRETRAINED_UNET_CKPT = args.pretrained_unet
 
 # loss hyperparams (new)
 FECG_RATIO = args.fecg_recon_loss # fecg recon
-MECG_RATIO = 1 # mecg recon
 FECG_PEAK_LOSS_RATIO = args.fecg_peak_loss # fecg peak loss
+FECG_PEAK_CLASS_RATIO = args.peak_loss_ratio # how much to weigh gt peaks on the positive mask
 
 # data
 DROP_LAST = args.drop_last

@@ -139,7 +139,7 @@ class ECGDataset(Dataset):
             transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask', 'binary_maternal_mask', 'noise'))
             transforms.add_transform('reshape_peaks', ('fecg_peaks',))
             transforms.add_transform('scale_multiple_segments', None)
-            transforms.add_transform('pop_keys', ('maternal_mask', 'fetal_mask', 'num_windows'))
+            transforms.add_transform('pop_keys', ('maternal_mask', 'fetal_mask', 'num_windows', 'binary_maternal_mask'))
             transforms.add_transform('change_dtype', (torch.float32, None))
             return transforms
 

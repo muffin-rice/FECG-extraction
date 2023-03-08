@@ -8,6 +8,7 @@ from pytorch_lightning.loops import Loop
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.utilities.seed import seed_everything
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+from pytorch_lightning.core.saving import save_hparams_to_yaml
 from hyperparams import *
 
 from tqdm import tqdm
@@ -59,8 +60,8 @@ class NoiseLoop(Loop):
 def get_loss_param_dict():
     return {
         'fecg' : FECG_RATIO,
-        'mecg' : MECG_RATIO,
         'fecg_peak' : FECG_PEAK_LOSS_RATIO,
+        'fecg_peak_mask' : FECG_PEAK_CLASS_RATIO - 1
     }
 
 def make_unet(path : str = ''):
@@ -155,10 +156,7 @@ def main(**kwargs):
                          batch_size=max(2, int(BATCH_SIZE / NUM_TRAINER_WORKERS)))
     bar = LitProgressBar()
 
-    # tb_logger.experiment.add_hparams({
-    #     'down_planes' : DOWN_PLANES,
-    #     ''
-    # }, {})
+    save_hparams_to_yaml(f'Run/Logging/{MODEL_NAME}/hyperparams.yaml', vars(args))
 
     runner = Trainer(logger=tb_logger,
                      auto_scale_batch_size=True,
