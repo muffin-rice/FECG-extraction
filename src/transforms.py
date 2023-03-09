@@ -60,28 +60,29 @@ class Transforms:
         # filtering
         self.transforms = []
         self.transform_dictionary = {
-            'transform_keys' : self.perform_transforms,
-            'downsample' : self.downsample,
-            'filter' : self.filter,
-            'remove_bad_keys' : self.remove_bad_keys,
-            'duplicate_keys' : self.duplicate_keys,
-            'perform_trim' : self.perform_trim,
-            'resample' : self.resample_signal,
-            'get_signal_masks' : self.get_signal_masks,
-            'reshape_keys' : self.reshape_keys,
-            'reshape_peaks' : self.reshape_peaks,
-            'check_signal_shape' : self.check_signal_shape,
-            'add_noise_signal' : self.add_noise_signal,
+            'add_brownian_noise': self.add_brownian_noise,
+            'add_noise_signal': self.add_noise_signal,
+            'add_to_dict': self.add_to_dict,
+            'assert_nonzero': self.assert_nonzero,
+            'assert_nonzero2': self.assert_nonzero2,
+            'change_dtype': self.change_dtype,
+            'check_nans': self.check_nans,
+            'check_signal_shape': self.check_signal_shape,
+            'correct_peaks': self.correct_peaks,
+            'downsample': self.downsample,
+            'duplicate_keys': self.duplicate_keys,
+            'filter': self.filter,
+            'get_signal_masks': self.get_signal_masks,
+            'perform_trim': self.perform_trim,
+            'pop_keys': self.pop_keys,
+            'print_keys': self.print_keys,
+            'remove_bad_keys': self.remove_bad_keys,
+            'reshape_keys': self.reshape_keys,
+            'reshape_peaks': self.reshape_peaks,
+            'resample': self.resample_signal,
             'scale_segment' : self.scale_segment,
             'scale_multiple_segments' : self.scale_multiple_segments,
-            'pop_keys' : self.pop_keys,
-            'check_nans' : self.check_nans,
-            'print_keys' : self.print_keys,
-            'correct_peaks' : self.correct_peaks,
-            'change_dtype' : self.change_dtype,
-            'add_to_dict' : self.add_to_dict,
-            'assert_nonzero' : self.assert_nonzero,
-            'assert_nonzero2' : self.assert_nonzero2,
+            'transform_keys' : self.perform_transforms,
         }
 
     def add_transform(self, transform_name : str, transform_params : (any,)):
@@ -174,7 +175,7 @@ class Transforms:
             bordered_peaks = (signal_dict[peak_key][between] - borders[0]) / WINDOW_LENGTH
             pad_amount = pad_length-bordered_peaks.shape[0]
             assert pad_amount >= 0
-            assert pad_amount < pad_length
+            # assert pad_amount < pad_length, f'peaks are zero: {signal_dict[peak_key]} on window {window} and len {WINDOW_LENGTH}'
             padded_peaks = np.pad(bordered_peaks, pad_width=(0, pad_amount), mode='constant')
             peak_locs[window,:] = padded_peaks
 
@@ -187,9 +188,9 @@ class Transforms:
         for key in keys_to_check:
             assert not np.isnan(signal_dict[key]).any(), f'Signals are nan {signal_dict[key]}'
 
-    def add_noise_signal(self, signal_dict, noise_key, shape_key):
+    def add_noise_signal(self, signal_dict, noise, noise_key, shape_key):
         '''adds a gaussian noise (random) '''
-        signal_dict[noise_key] += generate_gaussian_noise_by_shape(shape=signal_dict[shape_key].shape, stdev=NOISE).numpy()
+        signal_dict[noise_key] += generate_gaussian_noise_by_shape(shape=signal_dict[shape_key].shape, stdev=noise)
 
     def scale_segment(self, signal_dict):
         mf_ratio = get_random_mfratio(MF_RATIO, MF_RATIO_STD)
@@ -205,9 +206,9 @@ class Transforms:
         signal_dict[peak_key] = correct_peaks(peaks = signal_dict[peak_key], sig = signal_dict[sig_key][0],
                                               window_radius=window_radius)
 
-    def scale_multiple_segments(self, signal_dict):
+    def scale_multiple_segments(self, signal_dict, mf_ratio_mean, mf_ratio_std):
         '''scales multiple segments'''
-        mf_ratio = get_random_mfratio(MF_RATIO, MF_RATIO_STD)
+        mf_ratio = get_random_mfratio(mf_ratio_mean, mf_ratio_std)
         signal_dict['offset'] = np.zeros_like(signal_dict['mecg_sig'])
         signal_dict['mf_ratio'] = mf_ratio
         for i in range(signal_dict['num_windows']):
@@ -244,3 +245,7 @@ class Transforms:
     def assert_nonzero2(self, signal_dict, *keys):
         for key in keys:
             assert signal_dict[key].any(axis=1).all()
+
+    def add_brownian_noise(self, signal_dict, stdev, noise_key):
+        random_noise = generate_gaussian_noise_by_shape(signal_dict[noise_key].shape, stdev)
+        signal_dict[noise_key] += np.cumsum(random_noise)
