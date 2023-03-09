@@ -22,7 +22,7 @@ def load_data(data_dir: str) -> np.array:
 
 class ECGDataset(Dataset):
     def __init__(self, window_size, split: str = 'train', numtaps = NUM_TAPS, data_dir=DATA_DIR, load_type=LOAD_TYPE,
-                 fixed_num_windows : bool = FIXED_NUM_WINDOWS):
+                 fixed_num_windows : bool = FIXED_NUM_WINDOWS, num_windows = NUM_WINDOWS):
         super(ECGDataset, self).__init__()
         # self.train_data, self.val_data, self.test_data = load_data(data_dir)
         self.noise = NOISE
@@ -31,6 +31,7 @@ class ECGDataset(Dataset):
         self.ratio = COMPRESS_RATIO
         self.num_taps = numtaps
         self.fixed_num_windows = fixed_num_windows
+        self.num_windows = num_windows
 
         if TRAIN_PEAKHEAD:
             # TODO: remove hardcoded
@@ -97,12 +98,13 @@ class ECGDataset(Dataset):
         transforms.add_transform('remove_bad_keys', None)
 
         if self.load_type == 'competition':
-            transforms.add_transform('add_to_dict', ('num_windows', NUM_WINDOWS))
+            transforms.add_transform('add_to_dict', ('num_windows', self.num_windows))
             transforms.add_transform('filter', ('mecg_sig', 125, 1, 55, 3))
             transforms.add_transform('filter', ('fecg_sig', 125, 1, 55, 3))
-            desired_length = WINDOW_LENGTH * NUM_WINDOWS
+            desired_length = WINDOW_LENGTH * self.num_windows
             transforms.add_transform('perform_trim', (desired_length, ('mecg_sig', 'fecg_sig', 'fecg_peaks')))
-            transforms.add_transform('duplicate_keys', ('mecg_sig', 'binary_maternal_mask', 'binary_fetal_mask', 'noise'))
+            transforms.add_transform('duplicate_keys', ('mecg_sig', 'binary_maternal_mask', 'noise'))
+            transforms.add_transform('get_signal_masks', ('fetal_mask', 'binary_fetal_mask', 'fecg_sig', 'fecg_peaks'))
             transforms.add_transform('check_nans', ('mecg_sig', 'fecg_sig'))
             transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask',
                                                       'binary_maternal_mask', 'noise'))
@@ -115,9 +117,9 @@ class ECGDataset(Dataset):
         if self.load_type == 'whole':
             transforms.add_transform('downsample', ('fecg_sig', 2))
             if self.fixed_num_windows:
-                curr_num_windows = NUM_WINDOWS
-            elif NUM_WINDOWS > 1:
-                curr_num_windows = get_random_numwindow(NUM_WINDOWS, WINDOW_WEIGHTS)
+                curr_num_windows = self.num_windows
+            elif self.num_windows > 1:
+                curr_num_windows = get_random_numwindow(self.num_windows, WINDOW_WEIGHTS)
             else:
                 curr_num_windows = 1
 
@@ -262,7 +264,7 @@ class ECGDataset(Dataset):
 class ECGDataModule(LightningDataModule):
     def __init__(self, data_dir: str, window_size, dataset_type: str = None, batch_size: int = BATCH_SIZE,
                  num_workers: int = NUM_DATA_WORKERS, pin_memory: bool = False, load_type : str = LOAD_TYPE,
-                 num_taps : int = NUM_TAPS):
+                 num_taps : int = NUM_TAPS, num_windows = NUM_WINDOWS):
         super().__init__()
         self.data_dir = data_dir
         self.window_size = window_size
@@ -272,6 +274,7 @@ class ECGDataModule(LightningDataModule):
         self.pin_memory = pin_memory
         self.load_type = load_type
         self.num_taps = num_taps
+        self.num_windows = num_windows
 
     def train_dataloader(self):
         data = ECGDataset(
@@ -279,7 +282,8 @@ class ECGDataModule(LightningDataModule):
             window_size=self.window_size,
             load_type=self.load_type,
             numtaps=self.num_taps,
-            split='train'
+            split='train',
+            num_windows=self.num_windows,
         )
 
         return DataLoader(
@@ -299,7 +303,8 @@ class ECGDataModule(LightningDataModule):
             window_size=self.window_size,
             load_type=self.load_type,
             numtaps=self.num_taps,
-            split='validation'
+            split='validation',
+            num_windows=self.num_windows,
         )
 
         return DataLoader(
@@ -319,7 +324,8 @@ class ECGDataModule(LightningDataModule):
             window_size=self.window_size,
             load_type=self.load_type,
             numtaps=self.num_taps,
-            split='test'
+            split='test',
+            num_windows=self.num_windows,
         )
 
         return DataLoader(
@@ -338,7 +344,8 @@ class ECGDataModule(LightningDataModule):
             window_size=self.window_size,
             load_type=self.load_type,
             numtaps=self.num_taps,
-            split='competition'
+            split='competition',
+            num_windows=self.num_windows,
         )
 
         return DataLoader(
