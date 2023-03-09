@@ -70,10 +70,10 @@ class UNet(pl.LightningModule):
         fecg_peaks = x['fecg_peaks'][:,0,:]
 
         binary_fetal_mask = x['binary_fetal_mask'][:, :1, :]
-        binary_maternal_mask = x['binary_maternal_mask'][:, :1, :]
+        # binary_maternal_mask = x['binary_maternal_mask'][:, :1, :]
 
         d = {'aecg_sig': aecg_sig, 'binary_fetal_mask': binary_fetal_mask,
-             'binary_maternal_mask': binary_maternal_mask, 'fecg_peaks' : fecg_peaks,
+             'fecg_peaks' : fecg_peaks, # 'binary_maternal_mask': binary_maternal_mask,
              'fecg_sig': fecg_sig, 'mecg_sig': mecg_sig, 'offset': offset}
 
         for k, v in d.items():
