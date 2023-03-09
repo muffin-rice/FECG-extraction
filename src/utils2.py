@@ -162,11 +162,11 @@ def gauss_kernel(n=5,sigma=1) -> np.ndarray:
     r = range(-int(n/2),int(n/2)+1)
     return np.array([1 / (sigma * sqrt(2*pi)) * exp(-float(x)**2/(2*sigma**2)) for x in r])
 
-def generate_gaussian_noise_by_shape(shape : (int,), stdev) -> torch.Tensor:
-    return (stdev) * torch.randn(*shape)
+def generate_gaussian_noise_by_shape(shape : (int,), stdev) -> np.array:
+    return normal(loc=0, scale=stdev, size=shape)
 
-def generate_normal_noise_by_shape(shape : (int,), stdev) -> torch.Tensor:
-    return (stdev) * (torch.rand(*shape) - 0.5)
+def generate_uniform_noise_by_shape(shape : (int,), stdev) -> np.array:
+    return uniform(-stdev, stdev, size=shape) / 2
 
 def resample_signal_noise_peak(signal : np.array, ratio, desired_length = 500, shape_index = 1, noise=None, peak=None):
     '''resamples numpy array by random uniform ratio'''
