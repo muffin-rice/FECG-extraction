@@ -110,7 +110,7 @@ class ECGDataset(Dataset):
                                                       'binary_maternal_mask', 'noise'))
             transforms.add_transform('reshape_peaks', ('fecg_peaks',))
             # transforms.add_transform('print_keys', ('fecg_sig', 'mecg_sig', 'binary_fetal_mask', 'noise'))
-            transforms.add_transform('scale_multiple_segments', None)
+            transforms.add_transform('scale_multiple_segments', (MF_RATIO, MF_RATIO_STD))
             transforms.add_transform('change_dtype', (torch.float32, None))
             return transforms
 
@@ -128,7 +128,8 @@ class ECGDataset(Dataset):
             desired_length = WINDOW_LENGTH * curr_num_windows
             desired_length_trim = int(desired_length * 1.2) # trim to keep in length of resampling
             transforms.add_transform('perform_trim', (desired_length_trim, ('mecg_sig',), ('fecg_sig', 'noise', 'fecg_peaks')))
-            transforms.add_transform('add_noise_signal', ('mecg_sig', 'mecg_sig'))
+            transforms.add_transform('add_noise_signal', (NOISE, 'mecg_sig', 'mecg_sig'))
+            transforms.add_transform('add_brownian_noise', (BROWNIAN_NOISE, 'mecg_sig'))
             transforms.add_transform('filter', ('mecg_sig', 125, 1, 50, 3))
             transforms.add_transform('resample', ('mecg_sig', None, None, desired_length, COMPRESS_RATIO))
             transforms.add_transform('resample', ('fecg_sig', 'noise', 'fecg_peaks', desired_length, COMPRESS_RATIO))
@@ -140,7 +141,7 @@ class ECGDataset(Dataset):
                                                      'binary_fetal_mask'))
             transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask', 'binary_maternal_mask', 'noise'))
             transforms.add_transform('reshape_peaks', ('fecg_peaks',))
-            transforms.add_transform('scale_multiple_segments', None)
+            transforms.add_transform('scale_multiple_segments', (MF_RATIO, MF_RATIO_STD))
             transforms.add_transform('pop_keys', ('maternal_mask', 'fetal_mask', 'num_windows', 'binary_maternal_mask'))
             transforms.add_transform('change_dtype', (torch.float32, None))
             return transforms

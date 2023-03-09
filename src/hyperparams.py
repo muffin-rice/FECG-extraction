@@ -86,6 +86,8 @@ parser.add_argument('--data_workers', type=int, default=8,
                     help='number of lightning data workers')
 parser.add_argument('--noise', type=float, default=0.0,
                     help='random uniform noise to add to data in noise param')
+parser.add_argument('--brownian_noise', type=float, default=0.0,
+                    help='std of brownian noise to add to data')
 parser.add_argument('--numtaps', type=int, default=31,
                     help='numtaps for MECG filtering')
 parser.add_argument('--drop_last', type=bool, default=True,
@@ -180,6 +182,7 @@ LOAD_INTO_MEMORY = False
 NUM_MECG_RANDS = 5
 NUM_FECG_RANDS = 10
 NOISE = args.noise # ideal noise is 0.001
+BROWNIAN_NOISE = args.brownian_noise
 BINARY_PEAK_WINDOW = 0 # +-2 marked as 1
 COMPRESS_RATIO = (0.84,1.16)
 PEAK_SCALE = 1
