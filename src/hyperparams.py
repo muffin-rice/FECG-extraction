@@ -98,6 +98,10 @@ parser.add_argument('--fixed_num_windows', type=bool, default=False,
                     help='fix num windows at num_windows')
 parser.add_argument('--window_weights', type=float, default=(.2,.2,.2,.2,.2), nargs='+',
                     help='weights of windows for sampling (if fixednumwin=False)')
+parser.add_argument('--suppress_peak', type=float, default=0,
+                    help='random chance of peak being suppressed (turn off by = 0)')
+parser.add_argument('--max_suppress', type=int, default=2,
+                    help='max number of suppressed peaks')
 
 # train arguments
 parser.add_argument('--trainer_workers', type=int, default=1,
@@ -183,6 +187,8 @@ NUM_MECG_RANDS = 5
 NUM_FECG_RANDS = 10
 NOISE = args.noise # ideal noise is 0.001
 BROWNIAN_NOISE = args.brownian_noise
+SUPPRESS_PEAK_CHANCE = args.suppress_peak
+MAX_SUPPRESS = args.max_suppress
 BINARY_PEAK_WINDOW = 0 # +-2 marked as 1
 COMPRESS_RATIO = (0.84,1.16)
 PEAK_SCALE = 1

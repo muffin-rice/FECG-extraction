@@ -82,6 +82,7 @@ class Transforms:
             'resample': self.resample_signal,
             'scale_segment' : self.scale_segment,
             'scale_multiple_segments' : self.scale_multiple_segments,
+            'suppress_peaks' : self.mute_fecg_peak,
             'transform_keys' : self.perform_transforms,
         }
 
@@ -249,3 +250,21 @@ class Transforms:
     def add_brownian_noise(self, signal_dict, stdev, noise_key):
         random_noise = generate_gaussian_noise_by_shape(signal_dict[noise_key].shape, stdev)
         signal_dict[noise_key] += np.cumsum(random_noise)
+
+    def mute_fecg_peak(self, signal_dict, chance, max_peaks, window_rad):
+        if chance == 0 or max_peaks == 0:
+            return
+        peak_key = 'fecg_peaks'
+        noise_key = 'noise'
+        sig_key = 'fecg_sig'
+        peaks_to_cancel = []
+        for peak in signal_dict[peak_key]:
+            if len(peaks_to_cancel) > max_peaks:
+                break
+
+            if random.random() < chance:
+                peaks_to_cancel.append(peak)
+
+        for cancel_peak in peaks_to_cancel:
+            signal_dict[noise_key][cancel_peak - window_rad : cancel_peak + window_rad] -= \
+                signal_dict[sig_key][cancel_peak - window_rad : cancel_peak + window_rad]
