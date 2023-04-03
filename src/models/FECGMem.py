@@ -100,10 +100,18 @@ class FECGMem(pl.LightningModule):
             self.key_memory[:, :, self.memory_iteration: self.memory_iteration + memory_key.shape[2]] = memory_key
             self.value_memory[:, :, self.memory_iteration: self.memory_iteration + memory_value.shape[2]] = memory_value
         else:
-            replace_i = self.memory_iteration % self.memory_length
+            # shift matrix, then append to end
+            self.key_memory[:,:,:self.memory_length-1] = self.key_memory[:,:,1:]
+            self.value_memory[:,:,:self.memory_length - 1] = self.value_memory[:, :, 1:]
 
-            self.key_memory[:, :, replace_i: replace_i + memory_key.shape[2]] = memory_key
-            self.value_memory[:, :, replace_i: replace_i + memory_value.shape[2]] = memory_value
+            self.key_memory[:,:,-1] = memory_key
+            self.value_memory[:,:,-1] = memory_value
+
+            # replace by mod
+            # replace_i = self.memory_iteration % self.memory_length
+            #
+            # self.key_memory[:, :, replace_i: replace_i + memory_key.shape[2]] = memory_key
+            # self.value_memory[:, :, replace_i: replace_i + memory_value.shape[2]] = memory_value
 
         self.memory_iteration += 1
 
@@ -318,8 +326,8 @@ class FECGMem(pl.LightningModule):
         # self.peak_shape = d['fecg_peaks'].shape
         model_output = self.forward(aecg_sig)
 
-        loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'],
-                                                    model_output['fecg_peak_recon'],  d['binary_fetal_mask']) # d['fecg_peaks'])
+        loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'][:,-1,:], d['fecg_sig'][:,-1,:],
+                                                    model_output['fecg_peak_recon'][:,-1,:],  d['binary_fetal_mask'][:,-1,:]) # d['fecg_peaks'])
 
         self.log_dict({f'val_{k}': v for k, v in loss_dict.items()}, sync_dist=True, batch_size=self.batch_size)
         model_output.update(loss_dict)
@@ -334,8 +342,8 @@ class FECGMem(pl.LightningModule):
         # self.peak_shape = d['fecg_peaks'].shape
         model_output = self.forward(aecg_sig)
 
-        loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'],
-                                                    model_output['fecg_peak_recon'], d['binary_fetal_mask']) # d['fecg_peaks'])
+        loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'][:,-1,:], d['fecg_sig'][:,-1,:],
+                                                    model_output['fecg_peak_recon'][:,-1,:], d['binary_fetal_mask'][:,-1,:]) # d['fecg_peaks'])
 
         model_output.update(loss_dict)
 
