@@ -259,12 +259,12 @@ class Transforms:
         sig_key = 'fecg_sig'
         peaks_to_cancel = []
         for peak in signal_dict[peak_key]:
-            if len(peaks_to_cancel) > max_peaks:
-                break
-
             if random.random() < chance:
                 peaks_to_cancel.append(peak)
 
+                if len(peaks_to_cancel) > max_peaks:
+                    break
+
         for cancel_peak in peaks_to_cancel:
-            signal_dict[noise_key][cancel_peak - window_rad : cancel_peak + window_rad] -= \
-                signal_dict[sig_key][cancel_peak - window_rad : cancel_peak + window_rad]
+            signal_dict[noise_key][0, cancel_peak - window_rad : cancel_peak + window_rad] -= \
+                signal_dict[sig_key][0, cancel_peak - window_rad : cancel_peak + window_rad]

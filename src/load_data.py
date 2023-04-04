@@ -231,8 +231,8 @@ class ECGDataset(Dataset):
         fname = self.dataset[idx]
         channel = COMPETITION_CHANNELS[idx]
 
-        sig = rdrecord(f'Data/competition/set-a/a{fname:02}').p_signal[:, channel][np.newaxis, ...]
-        with open(f'Data/competition/set-a-text/a{fname:02}.fqrs.txt', 'r') as f:
+        sig = rdrecord(f'{self.data_dir}/competition/set-a/a{fname:02}').p_signal[:, channel][np.newaxis, ...]
+        with open(f'{self.data_dir}/competition/set-a-text/a{fname:02}.fqrs.txt', 'r') as f:
             peaks = np.array(f.read().split('\n')[:-1], dtype=np.int32)
 
         signal = {}
