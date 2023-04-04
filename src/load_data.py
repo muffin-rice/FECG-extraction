@@ -33,14 +33,16 @@ class ECGDataset(Dataset):
         self.fixed_num_windows = fixed_num_windows
         self.num_windows = num_windows
 
+        self.split = split
+
         if TRAIN_PEAKHEAD:
             # TODO: remove hardcoded
             self.data_dir = f'Data/competition/{split}'
         else:
-            self.data_dir = f'{data_dir}/{split}'
+            self.data_dir = data_dir
 
         # TODO: change self.dataset function
-        self.dataset = load_data(f'{data_dir}/{split}')
+        # self.dataset = load_data(f'{data_dir}/{split}')
 
         if self.load_type == 'ss':
             self.create_ss_dataset()
@@ -65,11 +67,11 @@ class ECGDataset(Dataset):
     def create_whole_dataset(self):
         '''dataset built on indices; load separately and then map later'''
         # TODO: remove hardcode
-        self.fecg_dataset = load_data(f'Data/preprocessed_data/fecg_signal')
-        self.mecg_dataset = load_data(f'Data/preprocessed_data/mecg_signal')
+        self.fecg_dataset = load_data(f'{self.data_dir}/fecg_signal')
+        self.mecg_dataset = load_data(f'{self.data_dir}/mecg_signal')
 
         import pickle as pkl
-        with open(f'{self.data_dir}/index_mapping.pkl', 'rb') as f:
+        with open(f'{self.data_dir}/paired_indices/{self.split}/index_mapping.pkl', 'rb') as f:
             self.dataset = pkl.load(f)
 
     def create_ss_dataset(self):
@@ -136,6 +138,7 @@ class ECGDataset(Dataset):
             transforms.add_transform('correct_peaks', (10, 'fecg_peaks', 'fecg_sig'))
             transforms.add_transform('get_signal_masks', ('fetal_mask', 'binary_fetal_mask', 'fecg_sig', 'fecg_peaks'))
             transforms.add_transform('get_signal_masks', ('maternal_mask', 'binary_maternal_mask', 'mecg_sig', None))
+            transforms.add_transform('suppress_peaks', (SUPPRESS_PEAK_CHANCE, MAX_SUPPRESS, 10))
             transforms.add_transform('check_signal_shape', ('fecg_sig', 'mecg_sig'))
             transforms.add_transform('check_nans', ('fecg_sig', 'mecg_sig', 'fecg_peaks', 'binary_maternal_mask',
                                                      'binary_fetal_mask'))
