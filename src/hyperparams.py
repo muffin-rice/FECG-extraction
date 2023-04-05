@@ -102,6 +102,10 @@ parser.add_argument('--suppress_peak', type=float, default=0,
                     help='random chance of peak being suppressed (turn off by = 0)')
 parser.add_argument('--max_suppress', type=int, default=2,
                     help='max number of suppressed peaks')
+parser.add_argument('--vary_std', type=float, default=0,
+                    help='factor to vary the fecg_sig by before combining')
+parser.add_argument('--mf_std', type=float, default=0.5,
+                    help='factor to vary the mecg:fecg ratio')
 
 # train arguments
 parser.add_argument('--trainer_workers', type=int, default=1,
@@ -178,7 +182,7 @@ FECG_PEAK_CLASS_RATIO = args.peak_loss_ratio # how much to weigh gt peaks on the
 # data
 DROP_LAST = args.drop_last
 MF_RATIO = 4
-MF_RATIO_STD = 0.5
+MF_RATIO_STD = args.mf_std
 LOAD_TYPE = args.load_type
 NUM_WINDOWS = args.num_windows
 NUM_TAPS = args.numtaps
@@ -196,5 +200,6 @@ PEAK_SIGMA = 1
 WINDOW_WEIGHTS = tuple(args.window_weights)
 FIXED_NUM_WINDOWS = args.fixed_num_windows
 PAD_LENGTH = args.peak_padding
+VARY_STRENGTH = args.vary_std
 import numpy as np
 COMPETITION_CHANNELS = np.array([1,1,1,1,1,1,4,1,1,4,2,1,2,1,1,1,3,1,2,3,1,1,2,2,2,2,1,2,1,3,1,1,3,1,3,1,1,1,1,1,1,1,1,1,1,1,2,1,2,4,4,2,1,1,1,1,1,1,1,4,1,1,1,1,1,1,2,1,2,1,4,1,2,1,1]) - 1

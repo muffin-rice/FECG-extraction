@@ -84,6 +84,7 @@ class Transforms:
             'scale_multiple_segments' : self.scale_multiple_segments,
             'suppress_peaks' : self.mute_fecg_peak,
             'transform_keys' : self.perform_transforms,
+            'vary_signal_strength' : self.vary_signal_strength,
         }
 
     def add_transform(self, transform_name : str, transform_params : (any,)):
@@ -268,3 +269,10 @@ class Transforms:
         for cancel_peak in peaks_to_cancel:
             signal_dict[noise_key][0, cancel_peak - window_rad : cancel_peak + window_rad] -= \
                 signal_dict[sig_key][0, cancel_peak - window_rad : cancel_peak + window_rad]
+
+    def vary_signal_strength(self, signal_dict, signal_to_vary, strength_std):
+        vary_length = signal_dict[signal_to_vary].shape[-1]
+
+        vary = 1 + generate_gaussian_noise_by_shape(vary_length, strength_std)
+
+        signal_dict[signal_to_vary] *= vary

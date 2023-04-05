@@ -138,6 +138,7 @@ class ECGDataset(Dataset):
             transforms.add_transform('correct_peaks', (10, 'fecg_peaks', 'fecg_sig'))
             transforms.add_transform('get_signal_masks', ('fetal_mask', 'binary_fetal_mask', 'fecg_sig', 'fecg_peaks'))
             transforms.add_transform('get_signal_masks', ('maternal_mask', 'binary_maternal_mask', 'mecg_sig', None))
+            transforms.add_transform('vary_signal_strength', ('fecg_sig', VARY_STRENGTH))
             transforms.add_transform('suppress_peaks', (SUPPRESS_PEAK_CHANCE, MAX_SUPPRESS, 10))
             transforms.add_transform('check_signal_shape', ('fecg_sig', 'mecg_sig'))
             transforms.add_transform('check_nans', ('fecg_sig', 'mecg_sig', 'fecg_peaks', 'binary_maternal_mask',
