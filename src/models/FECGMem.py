@@ -101,11 +101,12 @@ class FECGMem(pl.LightningModule):
             self.value_memory[:, :, self.memory_iteration: self.memory_iteration + memory_value.shape[2]] = memory_value
         else:
             # shift matrix, then append to end
-            self.key_memory[:,:,:self.memory_length-1] = self.key_memory[:,:,1:]
-            self.value_memory[:,:,:self.memory_length - 1] = self.value_memory[:, :, 1:]
+            shift_length = (self.memory_length - 1) * memory_key.shape[2]
+            self.key_memory[:,:,:shift_length] = self.key_memory[:,:,memory_key.shape[2]:]
+            self.value_memory[:,:,:shift_length] = self.value_memory[:,:,memory_key.shape[2]:]
 
-            self.key_memory[:,:,-1] = memory_key
-            self.value_memory[:,:,-1] = memory_value
+            self.key_memory[:,:,shift_length:] = memory_key
+            self.value_memory[:,:,shift_length:] = memory_value
 
             # replace by mod
             # replace_i = self.memory_iteration % self.memory_length
@@ -358,3 +359,6 @@ class FECGMem(pl.LightningModule):
         random_input = torch.rand((self.batch_size, 5, 250)) # window len 5 will make summary long, change to 1 if too long
         self.peak_shape = (self.batch_size, 5, self.pad_length) # only a single peak for the entire window
         return summary(self, input_data=random_input, depth=depth)
+
+    def change_batch_size(self, batch_size):
+        self.batch_size = batch_size
