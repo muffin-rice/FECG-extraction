@@ -57,7 +57,6 @@ def get_bad_keys(d):
 
 class Transforms:
     def __init__(self):
-        # filtering
         self.transforms = []
         self.transform_dictionary = {
             'add_brownian_noise': self.add_brownian_noise,

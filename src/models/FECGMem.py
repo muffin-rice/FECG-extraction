@@ -214,8 +214,8 @@ class FECGMem(pl.LightningModule):
         initial_value, initial_value_outs = self.encode_value(initial_aecg_segment)
         initial_query, _ = self.encode_query(initial_aecg_segment)
 
-        value_proj = self.value_key_proj(initial_value)
         query_proj = self.query_key_proj(initial_query)
+        value_proj = self.value_key_proj(initial_value)
         self._initialize_memory(query_proj, value_proj)
 
         memory_value = self.retrieve_memory_value(query_proj)
@@ -234,8 +234,8 @@ class FECGMem(pl.LightningModule):
             query, _ = self.encode_query(segment)
             value, value_outs = self.encode_value(segment)
 
-            value_proj = self.value_key_proj(value)
             query_proj = self.query_key_proj(query)
+            value_proj = self.value_key_proj(value)
             self.add_to_memory(query_proj, value_proj)
 
             memory_value = self.retrieve_memory_value(query_proj)
@@ -296,7 +296,6 @@ class FECGMem(pl.LightningModule):
                 d[k] = v.float()
 
     def training_step(self, d: {}, batch_idx):
-        self.is_training = False
         self.memory_initialized = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
@@ -320,7 +319,6 @@ class FECGMem(pl.LightningModule):
         return loss_dict['total_loss']
 
     def validation_step(self, d : {}, batch_idx):
-        self.is_training = False
         self.memory_initialized = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
@@ -336,7 +334,6 @@ class FECGMem(pl.LightningModule):
         return model_output
 
     def test_step(self, d : {}, batch_idx):
-        self.is_training = False
         self.memory_initialized = False
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']

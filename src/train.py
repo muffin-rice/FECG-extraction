@@ -3,6 +3,7 @@ from load_data import ECGDataModule
 from models.unet import UNet
 from models.wnet import WNet
 from models.FECGMem import FECGMem
+from models.LSTM_baseline import LSTM_baseline
 from pytorch_lightning import Trainer
 from pytorch_lightning.loops import Loop
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -85,6 +86,32 @@ def make_unet(path : str = ''):
                 linear_layers=LINEAR_LAYERS, pad_length=PAD_LENGTH,
                 embed_dim=EMBED_DIM, peak_downsamples=PEAK_DOWNSAMPLES,)
 
+def make_lstm(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
+    print('=====Making LSTM Model=====')
+    if path:
+        return LSTM_baseline.load_from_checkpoint(path,
+                                                  sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
+                                                  value_encoder_params=(
+                                                  VALUE_DOWN_PLANES, VALUE_DOWN_KERNELS, VALUE_DOWN_STRIDES),
+                                                  decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
+                                                  batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
+                                                  decoder_skips=SKIP, num_layers=2, embed_dim=EMBED_DIM,
+                                                  window_length=WINDOW_LENGTH, pretrained_unet=None
+                                                  )
+
+    if unet_path:
+        pretrained_unet = make_unet(path)
+    else:
+        pretrained_unet = None
+
+    return LSTM_baseline(sample_ecg=SAMPLE_ECG, loss_ratios=get_loss_param_dict(),
+                         value_encoder_params=(VALUE_DOWN_PLANES, VALUE_DOWN_KERNELS, VALUE_DOWN_STRIDES),
+                         decoder_params=(UP_PLANES, UP_KERNELS, UP_STRIDES),
+                         batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE,
+                         decoder_skips=SKIP, num_layers=2, embed_dim=EMBED_DIM,
+                         window_length=WINDOW_LENGTH, pretrained_unet=pretrained_unet)
+
+
 def make_wnet(path : str = ''):
     print('=====Making WNet Model=====')
     if path:
@@ -141,14 +168,17 @@ def main(**kwargs):
     # For reproducibility
     seed_everything(SEED, True)
 
-    if MODEL == 'unet':
-        model = make_unet()
-    elif MODEL == 'wnet':
-        model = make_wnet()
-    elif MODEL == 'fecgmem':
-        model = make_fecgmem()
+    model_registry = {
+        'unet' : make_unet,
+        'wnet' : make_wnet,
+        'fecgmem' : make_fecgmem,
+        'lstm_baseline' : make_lstm,
+    }
+
+    if MODEL not in model_registry:
+        raise NotImplementedError('Model not implemented')
     else:
-        raise NotImplementedError
+        model = model_registry[MODEL]()
 
     model.to(DEVICE)
 

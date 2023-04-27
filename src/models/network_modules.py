@@ -131,7 +131,7 @@ class KeyProjector(nn.Module):
         self.input_dim = input_dim
         self.key_dim = key_dim
 
-        self.key_proj = nn.Conv1d(input_dim, key_dim, kernel_size=3, padding=1)
+        self.key_proj = nn.Conv1d(input_dim, key_dim, kernel_size=1)
 
         nn.init.orthogonal_(self.key_proj.weight.data)
         nn.init.zeros_(self.key_proj.bias.data)
