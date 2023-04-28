@@ -140,6 +140,57 @@ class KeyProjector(nn.Module):
         # TODO: shrinkage and selection
         return self.key_proj(x)
 
+class NaiveMemory:
+    '''Naive memory is just storing the memory as a plain matrix without any sophisticated
+    memory management'''
+    def __init__(self, device, memory_length, embed_dim):
+        self.device = device
+        self.memory_initialized = False
+        self.memory_length = memory_length
+        self.embed_dim = embed_dim
+
+    def _reinitialize_memory(self, batch_size, sequence_length,):
+        '''initializes the key and value memories
+                memory has shape B x K x N * P'''
+        self.key_memory = torch.zeros((batch_size, self.embed_dim, self.memory_length * sequence_length)).to(self.device)
+        self.value_memory = torch.zeros((batch_size, self.embed_dim, self.memory_length * sequence_length)).to(self.device)
+
+        self.memory_initialized = True
+        self.memory_iteration = 0
+
+    def add_to_memory(self, memory_value : torch.Tensor, memory_key : torch.Tensor):
+        '''adds value/key to memory'''
+        if self.memory_iteration < self.memory_length:
+            self.key_memory[:, :, self.memory_iteration: self.memory_iteration + memory_key.shape[2]] = memory_key
+            self.value_memory[:, :, self.memory_iteration: self.memory_iteration + memory_value.shape[2]] = memory_value
+        else:
+            # shift matrix, then append to end
+            shift_length = (self.memory_length - 1) * memory_key.shape[2]
+            self.key_memory[:,:,:shift_length] = self.key_memory[:,:,memory_key.shape[2]:]
+            self.value_memory[:,:,:shift_length] = self.value_memory[:,:,memory_key.shape[2]:]
+
+            self.key_memory[:,:,shift_length:] = memory_key
+            self.value_memory[:,:,shift_length:] = memory_value
+
+        self.memory_iteration += 1
+
+    def get_key_memory(self) -> torch.Tensor:
+        '''returns value memory in shape of B x QK x N*P'''
+        return self.key_memory
+
+    def get_value_memory(self) -> torch.Tensor:
+        '''returns value memory in shape of B x Vk x N*P'''
+        return self.value_memory
+
+    def is_memory_initialized(self):
+        return self.memory_initialized
+
+    def abolish_memory(self):
+        del self.key_memory
+        del self.value_memory
+        self.memory_initialized = False
+        self.memory_iteration = 0
+
 # class PeakHead(nn.Module):
 #     '''Downsample sequence further, then flatten and perform regression'''
 #     def __init__(self, starting_planes : int, ending_planes : int, hidden_layers : (int,), output_length : int,
