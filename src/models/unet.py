@@ -1,14 +1,14 @@
 import torch
 from torch import nn, optim
 import pytorch_lightning as pl
-from .network_modules import Encoder, Decoder, KeyProjector#, PeakHead
+from .network_modules import Encoder, Decoder, KeyProjector, RNN#, PeakHead
 from .losses import *
 
 class UNet(pl.LightningModule):
     def __init__(self, sample_ecg : torch.Tensor, learning_rate : float, fecg_down_params : ((int,),),
                  fecg_up_params : ((int,),), loss_ratios : {str : int}, batch_size : int, decoder_skips : bool,
                  initial_conv_planes : int, linear_layers : (int,), pad_length : int, embed_dim : int,
-                 peak_downsamples : int):
+                 peak_downsamples : int, include_rnn : bool):
         # params in the format ((num_planes), (kernel_width), (stride))
         super().__init__()
 
@@ -19,17 +19,24 @@ class UNet(pl.LightningModule):
 
         self.fecg_decode = Decoder(fecg_up_params, ('tanh', 'sigmoid'), skips=decoder_skips)
 
+        self.include_rnn = include_rnn
+        if include_rnn:
+            assert fecg_up_params[0][0] == 2*fecg_down_params[0][-1]
+            self.rnn = RNN(device=self.device, val_dim=fecg_down_params[0][-1], batch_size=batch_size)
+
         # for pretraining purposes, otherwise is just another conv layer
         self.value_key_proj = KeyProjector(fecg_down_params[0][-1], embed_dim)
-        self.value_unprojer = KeyProjector(embed_dim, fecg_up_params[0][0])
-
-        # self.fecg_peak_head = PeakHead(starting_planes=embed_dim, ending_planes=initial_conv_planes,
-        #                                hidden_layers=linear_layers, output_length=pad_length,
-        #                                num_downsampling=peak_downsamples)
+        self.value_unprojer = KeyProjector(embed_dim, fecg_down_params[0][-1])
 
         self.loss_params, self.batch_size = loss_ratios, batch_size
         # change dtype
         self.float()
+
+    def convert_to_float(self, d : {}):
+        # TODO: make better solution
+        for k, v in d.items():
+            if 'Tensor' in str(type(v)):
+                d[k] = v.float()
 
     def loss_function(self, results):
         # return all the losses with hyperparameters defined earlier
@@ -82,24 +89,40 @@ class UNet(pl.LightningModule):
         return d
 
     def forward(self, aecg_sig):
+        fecg_recon = torch.zeros_like(aecg_sig).to(self.device)
+        fecg_peak_recon = torch.zeros_like(aecg_sig).to(self.device)
 
-        # fecg_encode_outs : [fecg_sig (template), layer1, layer2, ..., layern, inner_layer]
-        fecg_encode_outs = self.fecg_encode(aecg_sig, None)
+        for i in range(aecg_sig.shape[1]):
+            segment = aecg_sig[:,[i],:]
 
-        value_proj = self.value_key_proj(fecg_encode_outs[-1])
-        value_unproj = self.value_unprojer(value_proj)
+            # fecg_encode_outs : [fecg_sig (template), layer1, layer2, ..., layern, inner_layer]
+            fecg_encode_outs = self.fecg_encode(segment, None)
 
-        (fecg_recon, fecg_peak_recon), _ = self.fecg_decode(value_unproj, None)
-        fecg_recon = fecg_recon[:,:,:aecg_sig.shape[2]]
-        fecg_peak_recon = fecg_peak_recon[:, :, :aecg_sig.shape[2]]
+            if self.include_rnn:
+                if i == 0:
+                    self.rnn._reinitialize(fecg_encode_outs[-1].shape[2], self.device)
 
-        # fecg_peak_recon = self.fecg_peak_head(value_proj)
+            value_proj = self.value_key_proj(fecg_encode_outs[-1])
+            value_unproj = self.value_unprojer(value_proj)
+
+            if self.include_rnn:
+                rnn_value = self.rnn(fecg_encode_outs[-1])
+                new_value = torch.concat((value_unproj, rnn_value), dim=1)
+
+            else:
+                new_value = value_unproj
+
+            (fecg_recon1, fecg_peak_recon1), _ = self.fecg_decode(new_value, fecg_encode_outs)
+            fecg_recon[:,i,:] = fecg_recon1[:,0,:aecg_sig.shape[2]]
+            fecg_peak_recon[:,i,:] = fecg_peak_recon1[:, 0, :aecg_sig.shape[2]]
 
         return {'fecg_recon' : fecg_recon, 'fecg_peak_recon' : fecg_peak_recon}
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
-        d = self.remap_input(batch)
-        model_outputs = self.forward(d['aecg_sig'])
+        d = batch
+        self.convert_to_float(d)
+        aecg_sig = d['fecg_sig'] + d['mecg_sig'] + d['noise'] - d['offset']
+        model_outputs = self.forward(aecg_sig)
 
         loss_dict = self.calculate_losses_into_dict(model_outputs['fecg_recon'], d['fecg_sig'],
                                                     model_outputs['fecg_peak_recon'], d['binary_fetal_mask'])
@@ -109,8 +132,10 @@ class UNet(pl.LightningModule):
         return loss_dict['total_loss']
 
     def validation_step(self, batch, batch_idx, optimizer_idx=0, log=False):
-        d = self.remap_input(batch)
-        model_outputs = self.forward(d['aecg_sig'])
+        d = batch
+        self.convert_to_float(d)
+        aecg_sig = d['fecg_sig'] + d['mecg_sig'] + d['noise'] - d['offset']
+        model_outputs = self.forward(aecg_sig)
 
         loss_dict = self.calculate_losses_into_dict(model_outputs['fecg_recon'], d['fecg_sig'],
                                                     model_outputs['fecg_peak_recon'], d['binary_fetal_mask'])
@@ -121,8 +146,10 @@ class UNet(pl.LightningModule):
         return model_outputs
 
     def test_step(self, batch, batch_idx, optimizer_idx=0, log=False):
-        d = self.remap_input(batch)
-        model_outputs = self.forward(d['aecg_sig'])
+        d = batch
+        self.convert_to_float(d)
+        aecg_sig = d['fecg_sig'] + d['mecg_sig'] + d['noise'] - d['offset']
+        model_outputs = self.forward(aecg_sig)
 
         loss_dict = self.calculate_losses_into_dict(model_outputs['fecg_recon'], d['fecg_sig'],
                                                     model_outputs['fecg_peak_recon'], d['binary_fetal_mask'])

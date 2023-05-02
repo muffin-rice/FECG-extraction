@@ -2,7 +2,7 @@ import torch
 from torch import nn, optim
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from .network_modules import Encoder, KeyProjector, Decoder, NaiveMemory#, PeakHead
+from .network_modules import Encoder, KeyProjector, Decoder, NaiveMemory, RNN#, PeakHead
 from numpy import sqrt
 from .losses import *
 from .unet import UNet
@@ -13,15 +13,19 @@ class FECGMem(pl.LightningModule):
                  value_encoder_params : ((int,),), decoder_params : ((int,),), memory_length : int,
                  batch_size : int, learning_rate : float, loss_ratios : {str : int}, pretrained_unet : UNet,
                  decoder_skips : bool, initial_conv_planes : int, linear_layers : (int,), pad_length : int,
-                 peak_downsamples : int):
+                 peak_downsamples : int, include_rnn : bool):
         super().__init__()
         self.window_length = window_length
+        self.include_rnn = include_rnn
+
         if pretrained_unet is not None:
             self.value_encoder = pretrained_unet.fecg_encode
             self.value_decoder = pretrained_unet.fecg_decode
             # self.fecg_peak_head = pretrained_unet.fecg_peak_head
             self.value_key_proj = pretrained_unet.value_key_proj
             self.value_unprojer = pretrained_unet.value_unprojer
+            if include_rnn:
+                self.rnn = pretrained_unet.rnn
 
             print('Using pretrained value encoder/decoder')
         else:
@@ -33,6 +37,10 @@ class FECGMem(pl.LightningModule):
             self.value_key_proj = KeyProjector(value_encoder_params[0][-1], embed_dim)
             self.value_unprojer = KeyProjector(embed_dim, decoder_params[0][0])
 
+            if include_rnn:
+                assert decoder_params[0][0] == 2 * value_encoder_params[0][-1]
+                self.rnn = RNN(device=self.device, val_dim=value_encoder_params[0][-1], batch_size=batch_size)
+
         self.key_encoder = Encoder(query_encoder_params)
         self.embed_dim = embed_dim
         self.batch_size = batch_size
@@ -43,7 +51,6 @@ class FECGMem(pl.LightningModule):
 
         self.float()
 
-        # TODO: project the memory
         self.query_key_proj = KeyProjector(query_encoder_params[0][-1], embed_dim)
 
     def encode_value(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
@@ -58,15 +65,21 @@ class FECGMem(pl.LightningModule):
         encoded_key = self.key_encoder(segment)
         return encoded_key[-1], encoded_key
 
-    def decode_value(self, value : torch.Tensor, value_skips) -> torch.Tensor:
+    def decode_value(self, value : torch.Tensor, value_skips, rnn_value = None) -> torch.Tensor:
         value = self.value_unprojer(value)
+
+        if rnn_value is not None:
+            value = torch.concat((value, rnn_value), dim=1)
         initial_guess, _ = self.value_decoder(value, value_skips)
 
         return initial_guess
 
     def _initialize_memory(self, memory_key : torch.Tensor, memory_value : torch.Tensor):
         assert not self.memory.is_memory_initialized()
-        self.memory._reinitialize_memory(self.batch_size, memory_key.shape[2])
+        self.seq_length = memory_key.shape[2]
+        self.memory._reinitialize_memory(self.batch_size, self.seq_length)
+        if self.include_rnn:
+            self.rnn._reinitialize(self.seq_length, self.device)
 
         self.memory.add_to_memory(memory_value, memory_key)
 
@@ -175,8 +188,12 @@ class FECGMem(pl.LightningModule):
         value_proj = self.value_key_proj(initial_value)
         self._initialize_memory(query_proj, value_proj)
 
+        rnn_value = None
+        if self.include_rnn:
+            rnn_value = self.rnn(initial_value)
+
         memory_value = self.retrieve_memory_value(query_proj)
-        initial_guess = self.decode_value(memory_value, initial_value_outs)
+        initial_guess = self.decode_value(memory_value, initial_value_outs, rnn_value)
 
         # fecg_peak_recon[:,0,:] = self.fecg_peak_head(value_proj)
         fecg_recon[:, 0, :] = initial_guess[0][:, 0, :self.window_length]
@@ -191,12 +208,15 @@ class FECGMem(pl.LightningModule):
             query, _ = self.encode_query(segment)
             value, value_outs = self.encode_value(segment)
 
+            if self.include_rnn:
+                rnn_value = self.rnn(value)
+
             query_proj = self.query_key_proj(query)
             value_proj = self.value_key_proj(value)
             self.add_to_memory(query_proj, value_proj)
 
             memory_value = self.retrieve_memory_value(query_proj)
-            guess = self.decode_value(memory_value, value_outs)
+            guess = self.decode_value(memory_value, value_outs, rnn_value)
 
             # fecg_peak_recon[:, i, :] = self.fecg_peak_head(memory_value)
             fecg_recon[:,i,:] = guess[0][:, 0, :self.window_length]
@@ -207,7 +227,8 @@ class FECGMem(pl.LightningModule):
         return {'fecg_recon' : fecg_recon, 'fecg_peak_recon' : fecg_peak_recon}
 
     def train_forward(self, aecg_sig: torch.Tensor) -> {str : torch.Tensor}:
-        '''same thing as forward but only outputs the last segment'''
+        '''same thing as forward but only outputs the last segment
+        (inplace operations on the matrix impact the gradient)'''
         # fecg_recon, fecg_peak_recon = torch.zeros_like(aecg_sig), torch.zeros_like(aecg_sig)
 
         # get initial guess and initialize memory
@@ -219,6 +240,11 @@ class FECGMem(pl.LightningModule):
         query_proj = self.query_key_proj(initial_query)
         self._initialize_memory(query_proj, value_proj)
 
+        if self.include_rnn:
+            _ = self.rnn(initial_value)
+
+        rnn_value = None
+
         for i in range(aecg_sig.shape[1]):
             if i == 0:
                 continue
@@ -228,13 +254,16 @@ class FECGMem(pl.LightningModule):
             query, _ = self.encode_query(segment)
             value, value_outs = self.encode_value(segment)
 
+            if self.include_rnn:
+                rnn_value = self.rnn(value)
+
             value_proj = self.value_key_proj(value)
             query_proj = self.query_key_proj(query)
             self.add_to_memory(query_proj, value_proj)
 
         else:
             memory_value = self.retrieve_memory_value(query_proj)
-            guess = self.decode_value(memory_value, value_outs)
+            guess = self.decode_value(memory_value, value_outs, rnn_value)
 
             # fecg_peak_recon = self.fecg_peak_head(memory_value)
             fecg_recon = guess[0][:, 0, :self.window_length]
@@ -253,7 +282,7 @@ class FECGMem(pl.LightningModule):
     def training_step(self, d: {}, batch_idx):
         self.convert_to_float(d)
         self.memory.device = self.device
-        aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
+        aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise'] - d['offset']
         # performs backwards on the last segment only to avoid inplace operations with the masking
         # self.peak_shape = d['fecg_peaks'].shape
         model_output = self.train_forward(aecg_sig)
@@ -276,7 +305,7 @@ class FECGMem(pl.LightningModule):
     def validation_step(self, d : {}, batch_idx):
         self.memory.device = self.device
         self.convert_to_float(d)
-        aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
+        aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise'] - d['offset']
         # self.peak_shape = d['fecg_peaks'].shape
         model_output = self.forward(aecg_sig)
 
@@ -291,7 +320,7 @@ class FECGMem(pl.LightningModule):
     def test_step(self, d : {}, batch_idx):
         self.memory.device = self.device
         self.convert_to_float(d)
-        aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise']
+        aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise'] - d['offset']
         # self.peak_shape = d['fecg_peaks'].shape
         model_output = self.forward(aecg_sig)
 

@@ -48,6 +48,8 @@ parser.add_argument('--val_dim', type=int, default=128,
                     help='value dimension')
 parser.add_argument('--embed_dim', type=int, default=128,
                     help='embed dimension')
+parser.add_argument('--include_rnn', type=bool, default=False,
+                    help='have rnn (either fecgmem or unet)')
 
 # loss arguments
 parser.add_argument('--fecg_recon_loss', type=int, default=4,
@@ -173,6 +175,7 @@ MEMORY_LENGTH = args.memory_length
 # VAL_DIM = args.val_dim
 EMBED_DIM = args.embed_dim
 PRETRAINED_UNET_CKPT = args.pretrained_unet
+INCLUDE_RNN = args.include_rnn
 
 # loss hyperparams (new)
 FECG_RATIO = args.fecg_recon_loss # fecg recon

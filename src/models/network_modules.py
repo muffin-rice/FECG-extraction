@@ -140,6 +140,34 @@ class KeyProjector(nn.Module):
         # TODO: shrinkage and selection
         return self.key_proj(x)
 
+class RNN(nn.Module):
+    def __init__(self, device, val_dim, batch_size):
+        super().__init__()
+
+        self.val_dim = val_dim
+        self.batch_size = batch_size
+
+        self.hidden_state = None
+
+        self.hidden_conv = nn.Sequential(*[
+            nn.Conv1d(2 * self.val_dim, 2*self.val_dim, kernel_size=3, stride=1, padding='same',),
+            nn.BatchNorm1d(2*self.val_dim),
+            nn.LeakyReLU(negative_slope=0.1)
+        ])
+
+    def _reinitialize(self, seq_length, device):
+        self.hidden_state = torch.zeros(self.batch_size, self.val_dim, seq_length).to(device)
+
+    def forward(self, value):
+        total_hidden = torch.concatenate((self.hidden_state, value), dim=1) # concat along feature dim
+
+        out_rnn = self.hidden_conv(total_hidden)
+
+        self.hidden_state = out_rnn[:,:self.val_dim,:]
+
+        return out_rnn[:,self.val_dim:,:]
+
+
 class NaiveMemory:
     '''Naive memory is just storing the memory as a plain matrix without any sophisticated
     memory management'''
@@ -149,11 +177,11 @@ class NaiveMemory:
         self.memory_length = memory_length
         self.embed_dim = embed_dim
 
-    def _reinitialize_memory(self, batch_size, sequence_length,):
+    def _reinitialize_memory(self, batch_size, seq_length, ):
         '''initializes the key and value memories
                 memory has shape B x K x N * P'''
-        self.key_memory = torch.zeros((batch_size, self.embed_dim, self.memory_length * sequence_length)).to(self.device)
-        self.value_memory = torch.zeros((batch_size, self.embed_dim, self.memory_length * sequence_length)).to(self.device)
+        self.key_memory = torch.zeros((batch_size, self.embed_dim, self.memory_length * seq_length)).to(self.device)
+        self.value_memory = torch.zeros((batch_size, self.embed_dim, self.memory_length * seq_length)).to(self.device)
 
         self.memory_initialized = True
         self.memory_iteration = 0
