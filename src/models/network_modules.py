@@ -180,6 +180,7 @@ class NaiveMemory:
     def _reinitialize_memory(self, batch_size, seq_length, ):
         '''initializes the key and value memories
                 memory has shape B x K x N * P'''
+        self.seq_length = seq_length
         self.key_memory = torch.zeros((batch_size, self.embed_dim, self.memory_length * seq_length)).to(self.device)
         self.value_memory = torch.zeros((batch_size, self.embed_dim, self.memory_length * seq_length)).to(self.device)
 
@@ -188,14 +189,16 @@ class NaiveMemory:
 
     def add_to_memory(self, memory_value : torch.Tensor, memory_key : torch.Tensor):
         '''adds value/key to memory'''
+        assert self.memory_initialized
         if self.memory_iteration < self.memory_length:
-            self.key_memory[:, :, self.memory_iteration: self.memory_iteration + memory_key.shape[2]] = memory_key
-            self.value_memory[:, :, self.memory_iteration: self.memory_iteration + memory_value.shape[2]] = memory_value
+            start_i = self.memory_iteration * self.seq_length
+            self.key_memory[:, :, start_i : start_i + self.seq_length] = memory_key
+            self.value_memory[:, :, start_i : start_i + self.seq_length] = memory_value
         else:
             # shift matrix, then append to end
-            shift_length = (self.memory_length - 1) * memory_key.shape[2]
-            self.key_memory[:,:,:shift_length] = self.key_memory[:,:,memory_key.shape[2]:]
-            self.value_memory[:,:,:shift_length] = self.value_memory[:,:,memory_key.shape[2]:]
+            shift_length = (self.memory_length - 1) * self.seq_length
+            self.key_memory[:,:,:shift_length] = self.key_memory[:,:,self.seq_length:]
+            self.value_memory[:,:,:shift_length] = self.value_memory[:,:,self.seq_length:]
 
             self.key_memory[:,:,shift_length:] = memory_key
             self.value_memory[:,:,shift_length:] = memory_value
@@ -209,6 +212,9 @@ class NaiveMemory:
     def get_value_memory(self) -> torch.Tensor:
         '''returns value memory in shape of B x Vk x N*P'''
         return self.value_memory
+
+    def get_memory_copy(self):
+        return torch.clone(self.key_memory).cpu(), torch.clone(self.value_memory).cpu()
 
     def is_memory_initialized(self):
         return self.memory_initialized

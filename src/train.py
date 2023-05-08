@@ -147,6 +147,7 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                                             decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
                                             linear_layers=LINEAR_LAYERS, pad_length=PAD_LENGTH,
                                             peak_downsamples=PEAK_DOWNSAMPLES, include_rnn=INCLUDE_RNN,
+                                            similarity = SIMILARITY,
                                             )
 
     if unet_path:
@@ -163,7 +164,8 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                    pretrained_unet=pretrained_unet, decoder_skips=SKIP,
                    initial_conv_planes=INITIAL_CONV_PLANES, linear_layers=LINEAR_LAYERS,
                    pad_length=PAD_LENGTH, peak_downsamples=PEAK_DOWNSAMPLES,
-                   include_rnn=INCLUDE_RNN, )
+                   include_rnn=INCLUDE_RNN, similarity = SIMILARITY,
+                   )
 
 def main(**kwargs):
     tb_logger = TensorBoardLogger(save_dir=LOG_DIR, name=MODEL_NAME)

@@ -50,6 +50,8 @@ parser.add_argument('--embed_dim', type=int, default=128,
                     help='embed dimension')
 parser.add_argument('--include_rnn', type=bool, default=False,
                     help='have rnn (either fecgmem or unet)')
+parser.add_argument('--similarity_type', type=str, default='dot',
+                    help='similarity calc between query and memory')
 
 # loss arguments
 parser.add_argument('--fecg_recon_loss', type=int, default=4,
@@ -176,6 +178,7 @@ MEMORY_LENGTH = args.memory_length
 EMBED_DIM = args.embed_dim
 PRETRAINED_UNET_CKPT = args.pretrained_unet
 INCLUDE_RNN = args.include_rnn
+SIMILARITY = args.similarity_type
 
 # loss hyperparams (new)
 FECG_RATIO = args.fecg_recon_loss # fecg recon

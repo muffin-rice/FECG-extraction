@@ -13,8 +13,14 @@ class FECGMem(pl.LightningModule):
                  value_encoder_params : ((int,),), decoder_params : ((int,),), memory_length : int,
                  batch_size : int, learning_rate : float, loss_ratios : {str : int}, pretrained_unet : UNet,
                  decoder_skips : bool, initial_conv_planes : int, linear_layers : (int,), pad_length : int,
-                 peak_downsamples : int, include_rnn : bool):
+                 peak_downsamples : int, include_rnn : bool, similarity : str):
         super().__init__()
+        similarity_dict = {
+            'l2' : self.compute_l2_similarity,
+            'dot' : self.compute_dot_similarity,
+            'cosine' : self.compute_cosine_similarity
+        }
+
         self.window_length = window_length
         self.include_rnn = include_rnn
 
@@ -35,7 +41,7 @@ class FECGMem(pl.LightningModule):
             #                                hidden_layers=linear_layers, output_length=pad_length,
             #                                num_downsampling=peak_downsamples)
             self.value_key_proj = KeyProjector(value_encoder_params[0][-1], embed_dim)
-            self.value_unprojer = KeyProjector(embed_dim, decoder_params[0][0])
+            self.value_unprojer = KeyProjector(embed_dim, value_encoder_params[0][-1])
 
             if include_rnn:
                 assert decoder_params[0][0] == 2 * value_encoder_params[0][-1]
@@ -48,6 +54,10 @@ class FECGMem(pl.LightningModule):
         self.learning_rate = learning_rate
         self.pad_length = pad_length
         self.memory = NaiveMemory(self.device, memory_length, embed_dim)
+        if similarity in similarity_dict:
+            self.compute_similarity = similarity_dict[similarity]
+        else:
+            raise NotImplementedError(f'Similarity {similarity} not implemented')
 
         self.float()
 
@@ -103,11 +113,12 @@ class FECGMem(pl.LightningModule):
 
         return memval_softmaxed
 
-    def compute_cosine_similarity(self, query, key_memory, order=2) -> torch.Tensor:
+    def compute_cosine_similarity(self, query, key_memory, order=2, eps = 1e-8) -> torch.Tensor:
         assert query.shape[1] == key_memory.shape[1], f'Shapes misaligned: {query.shape}, {key_memory.shape}'
         dot = torch.bmm(key_memory.transpose(1,2), query)
-        mag_query = torch.norm(query, dim=[1,2], p=order).view(query.shape[0], 1, 1)
-        mag_keymem = torch.norm(key_memory, dim=[1,2], p=order).view(query.shape[0], 1, 1)
+        mag_query = torch.norm(query, dim=1, p=order)[:,None,:]
+        mag_keymem = torch.norm(key_memory, dim=1, p=order)[:,:,None]
+        mag_query, mag_keymem = torch.max(mag_query, eps * torch.ones_like(mag_query)), torch.max(mag_keymem, eps * torch.ones_like(mag_keymem))
         cosine_similarity = dot / mag_query / mag_keymem
         return cosine_similarity
 
@@ -138,7 +149,7 @@ class FECGMem(pl.LightningModule):
         output is B x Qk x NQk'''
         # input is B x Ck x W, output is B x Qk x NQk
         key_memory = self.memory.get_key_memory()
-        return self.compute_cosine_similarity(query, key_memory) / sqrt(self.embed_dim)
+        return self.compute_dot_similarity(query, key_memory) / sqrt(self.embed_dim)
 
     def loss_function(self, results):
         # return all the losses with hyperparameters defined earlier
@@ -222,9 +233,11 @@ class FECGMem(pl.LightningModule):
             fecg_recon[:,i,:] = guess[0][:, 0, :self.window_length]
             fecg_peak_recon[:,i,:] = guess[1][:, 0, :self.window_length]
 
+        old_memory = self.memory.get_memory_copy()
+
         self.memory.abolish_memory()
 
-        return {'fecg_recon' : fecg_recon, 'fecg_peak_recon' : fecg_peak_recon}
+        return {'fecg_recon' : fecg_recon, 'fecg_peak_recon' : fecg_peak_recon, 'features' : old_memory}
 
     def train_forward(self, aecg_sig: torch.Tensor) -> {str : torch.Tensor}:
         '''same thing as forward but only outputs the last segment
