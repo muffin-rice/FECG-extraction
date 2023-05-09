@@ -2,7 +2,7 @@ import torch
 from torch import nn, optim
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from .network_modules import Encoder, KeyProjector, Decoder, NaiveMemory, RNN#, PeakHead
+from .network_modules import Encoder, KeyProjector, Decoder, NaiveMemory, RNN, PositionalEmbedder#, PeakHead
 from numpy import sqrt
 from .losses import *
 from .unet import UNet
@@ -13,7 +13,7 @@ class FECGMem(pl.LightningModule):
                  value_encoder_params : ((int,),), decoder_params : ((int,),), memory_length : int,
                  batch_size : int, learning_rate : float, loss_ratios : {str : int}, pretrained_unet : UNet,
                  decoder_skips : bool, initial_conv_planes : int, linear_layers : (int,), pad_length : int,
-                 peak_downsamples : int, include_rnn : bool, similarity : str):
+                 peak_downsamples : int, include_rnn : bool, similarity : str,):
         super().__init__()
         similarity_dict = {
             'l2' : self.compute_l2_similarity,
@@ -22,7 +22,7 @@ class FECGMem(pl.LightningModule):
         }
 
         self.window_length = window_length
-        self.include_rnn = include_rnn
+        self.include_rnn = include_rnn == 'True'
 
         if pretrained_unet is not None:
             self.value_encoder = pretrained_unet.fecg_encode
@@ -30,7 +30,7 @@ class FECGMem(pl.LightningModule):
             # self.fecg_peak_head = pretrained_unet.fecg_peak_head
             self.value_key_proj = pretrained_unet.value_key_proj
             self.value_unprojer = pretrained_unet.value_unprojer
-            if include_rnn:
+            if self.include_rnn:
                 self.rnn = pretrained_unet.rnn
 
             print('Using pretrained value encoder/decoder')
@@ -43,11 +43,15 @@ class FECGMem(pl.LightningModule):
             self.value_key_proj = KeyProjector(value_encoder_params[0][-1], embed_dim)
             self.value_unprojer = KeyProjector(embed_dim, value_encoder_params[0][-1])
 
-            if include_rnn:
+            if self.include_rnn:
                 assert decoder_params[0][0] == 2 * value_encoder_params[0][-1]
-                self.rnn = RNN(device=self.device, val_dim=value_encoder_params[0][-1], batch_size=batch_size)
+                self.rnn = RNN(val_dim=value_encoder_params[0][-1], batch_size=batch_size)
 
         self.key_encoder = Encoder(query_encoder_params)
+        # concat the embed features
+        self.embedder = PositionalEmbedder('baseline')
+        self.query_key_proj = KeyProjector(query_encoder_params[0][-1], embed_dim)
+
         self.embed_dim = embed_dim
         self.batch_size = batch_size
         self.loss_params = loss_ratios
@@ -61,19 +65,33 @@ class FECGMem(pl.LightningModule):
 
         self.float()
 
-        self.query_key_proj = KeyProjector(query_encoder_params[0][-1], embed_dim)
+    def move_device(self):
+        self.embedder.move_device(self.device)
+        self.memory.device = self.device
+
+    def preencode(self, segment : torch.Tensor):
+        # return self.embedder(segment)
+        return segment
 
     def encode_value(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
         '''encodes the value, returns the encoded value with projection (if any) and the skips'''
+        segment = self.preencode(segment)
         assert segment.shape[2] == self.window_length, f'Window len misaligned: {segment.shape}, {self.window_length}'
         encoded_values = self.value_encoder(segment)
         return encoded_values[-1], encoded_values
 
     def encode_query(self, segment : torch.Tensor) -> (torch.Tensor, (torch.Tensor,)):
         '''gets the encoded key given aecg segment'''
+        segment = self.preencode(segment)
         assert segment.shape[2] == self.window_length, f'Window len misaligned: {segment.shape}, {self.window_length}'
         encoded_key = self.key_encoder(segment)
         return encoded_key[-1], encoded_key
+
+    def get_query_projection(self, query):
+        return self.query_key_proj(query)
+
+    def get_value_projection(self, value):
+        return self.value_key_proj(value)
 
     def decode_value(self, value : torch.Tensor, value_skips, rnn_value = None) -> torch.Tensor:
         value = self.value_unprojer(value)
@@ -149,7 +167,7 @@ class FECGMem(pl.LightningModule):
         output is B x Qk x NQk'''
         # input is B x Ck x W, output is B x Qk x NQk
         key_memory = self.memory.get_key_memory()
-        return self.compute_dot_similarity(query, key_memory) / sqrt(self.embed_dim)
+        return self.compute_similarity(query, key_memory) / sqrt(self.embed_dim)
 
     def loss_function(self, results):
         # return all the losses with hyperparameters defined earlier
@@ -195,8 +213,8 @@ class FECGMem(pl.LightningModule):
         initial_value, initial_value_outs = self.encode_value(initial_aecg_segment)
         initial_query, _ = self.encode_query(initial_aecg_segment)
 
-        query_proj = self.query_key_proj(initial_query)
-        value_proj = self.value_key_proj(initial_value)
+        query_proj = self.get_query_projection(initial_query)
+        value_proj = self.get_value_projection(initial_value)
         self._initialize_memory(query_proj, value_proj)
 
         rnn_value = None
@@ -222,8 +240,8 @@ class FECGMem(pl.LightningModule):
             if self.include_rnn:
                 rnn_value = self.rnn(value)
 
-            query_proj = self.query_key_proj(query)
-            value_proj = self.value_key_proj(value)
+            query_proj = self.get_query_projection(query)
+            value_proj = self.get_value_projection(value)
             self.add_to_memory(query_proj, value_proj)
 
             memory_value = self.retrieve_memory_value(query_proj)
@@ -249,8 +267,8 @@ class FECGMem(pl.LightningModule):
         initial_value, value_outs = self.encode_value(initial_aecg_segment)
         initial_query, _ = self.encode_query(initial_aecg_segment)
 
-        value_proj = self.value_key_proj(initial_value)
-        query_proj = self.query_key_proj(initial_query)
+        value_proj = self.get_value_projection(initial_value)
+        query_proj = self.get_query_projection(initial_query)
         self._initialize_memory(query_proj, value_proj)
 
         if self.include_rnn:
@@ -270,8 +288,8 @@ class FECGMem(pl.LightningModule):
             if self.include_rnn:
                 rnn_value = self.rnn(value)
 
-            value_proj = self.value_key_proj(value)
-            query_proj = self.query_key_proj(query)
+            value_proj = self.get_value_projection(value)
+            query_proj = self.get_query_projection(query)
             self.add_to_memory(query_proj, value_proj)
 
         else:
@@ -294,7 +312,7 @@ class FECGMem(pl.LightningModule):
 
     def training_step(self, d: {}, batch_idx):
         self.convert_to_float(d)
-        self.memory.device = self.device
+        self.move_device()
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise'] - d['offset']
         # performs backwards on the last segment only to avoid inplace operations with the masking
         # self.peak_shape = d['fecg_peaks'].shape
@@ -316,7 +334,7 @@ class FECGMem(pl.LightningModule):
         return loss_dict['total_loss']
 
     def validation_step(self, d : {}, batch_idx):
-        self.memory.device = self.device
+        self.move_device()
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise'] - d['offset']
         # self.peak_shape = d['fecg_peaks'].shape
@@ -331,7 +349,7 @@ class FECGMem(pl.LightningModule):
         return model_output
 
     def test_step(self, d : {}, batch_idx):
-        self.memory.device = self.device
+        self.move_device()
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise'] - d['offset']
         # self.peak_shape = d['fecg_peaks'].shape
@@ -349,6 +367,7 @@ class FECGMem(pl.LightningModule):
         return optimizer
 
     def print_summary(self, depth = 7):
+        self.embedder.move_device(self.device)
         from torchinfo import summary
         random_input = torch.rand((self.batch_size, 5, 250)) # window len 5 will make summary long, change to 1 if too long
         self.peak_shape = (self.batch_size, 5, self.pad_length) # only a single peak for the entire window

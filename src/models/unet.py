@@ -1,7 +1,7 @@
 import torch
 from torch import nn, optim
 import pytorch_lightning as pl
-from .network_modules import Encoder, Decoder, KeyProjector, RNN#, PeakHead
+from .network_modules import Encoder, Decoder, KeyProjector, RNN, PositionalEmbedder#, PeakHead
 from .losses import *
 
 class UNet(pl.LightningModule):
@@ -19,18 +19,22 @@ class UNet(pl.LightningModule):
 
         self.fecg_decode = Decoder(fecg_up_params, ('tanh', 'sigmoid'), skips=decoder_skips)
 
-        self.include_rnn = include_rnn
-        if include_rnn:
+        self.include_rnn = include_rnn == 'True'
+        if self.include_rnn:
             assert fecg_up_params[0][0] == 2*fecg_down_params[0][-1]
-            self.rnn = RNN(device=self.device, val_dim=fecg_down_params[0][-1], batch_size=batch_size)
+            self.rnn = RNN(val_dim=fecg_down_params[0][-1], batch_size=batch_size)
 
         # for pretraining purposes, otherwise is just another conv layer
         self.value_key_proj = KeyProjector(fecg_down_params[0][-1], embed_dim)
         self.value_unprojer = KeyProjector(embed_dim, fecg_down_params[0][-1])
+        self.embedder = PositionalEmbedder()
 
         self.loss_params, self.batch_size = loss_ratios, batch_size
         # change dtype
         self.float()
+
+    def move_device(self):
+        self.embedder.move_device(self.device)
 
     def convert_to_float(self, d : {}):
         # TODO: make better solution
@@ -94,9 +98,10 @@ class UNet(pl.LightningModule):
 
         for i in range(aecg_sig.shape[1]):
             segment = aecg_sig[:,[i],:]
+            x = self.embedder.forward(segment)
 
             # fecg_encode_outs : [fecg_sig (template), layer1, layer2, ..., layern, inner_layer]
-            fecg_encode_outs = self.fecg_encode(segment, None)
+            fecg_encode_outs = self.fecg_encode(x, None)
 
             if self.include_rnn:
                 if i == 0:
@@ -120,6 +125,7 @@ class UNet(pl.LightningModule):
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         d = batch
+        self.move_device()
         self.convert_to_float(d)
         aecg_sig = d['fecg_sig'] + d['mecg_sig'] + d['noise'] - d['offset']
         model_outputs = self.forward(aecg_sig)
@@ -133,6 +139,7 @@ class UNet(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx, optimizer_idx=0, log=False):
         d = batch
+        self.move_device()
         self.convert_to_float(d)
         aecg_sig = d['fecg_sig'] + d['mecg_sig'] + d['noise'] - d['offset']
         model_outputs = self.forward(aecg_sig)
@@ -147,6 +154,7 @@ class UNet(pl.LightningModule):
 
     def test_step(self, batch, batch_idx, optimizer_idx=0, log=False):
         d = batch
+        self.move_device()
         self.convert_to_float(d)
         aecg_sig = d['fecg_sig'] + d['mecg_sig'] + d['noise'] - d['offset']
         model_outputs = self.forward(aecg_sig)
@@ -163,6 +171,7 @@ class UNet(pl.LightningModule):
         return optimizer
 
     def print_summary(self):
+        self.embedder.move_device(self.device)
         from torchinfo import summary
         random_input = torch.rand((self.batch_size, 1, 250))
         return summary(self, input_data=random_input, depth=7)

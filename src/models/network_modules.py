@@ -141,7 +141,7 @@ class KeyProjector(nn.Module):
         return self.key_proj(x)
 
 class RNN(nn.Module):
-    def __init__(self, device, val_dim, batch_size):
+    def __init__(self, val_dim, batch_size):
         super().__init__()
 
         self.val_dim = val_dim
@@ -224,6 +224,42 @@ class NaiveMemory:
         del self.value_memory
         self.memory_initialized = False
         self.memory_iteration = 0
+
+class PositionalEmbedder(nn.Module):
+    def __init__(self, positional_type = 'none', add = True):
+        super().__init__()
+        self.embedding_type = positional_type
+        self.inited = False
+        self.add = add # if not add, concat
+        self.get_embedding = {
+            'baseline' : self.get_baseline_embedding,
+            'none' : self.get_no_embedding,
+        }
+
+    def move_device(self, device):
+        self.device = device
+
+    def forward(self, x):
+        embedding = self.get_embedding[self.embedding_type](x)
+        if self.add:
+            return x + embedding
+        else:
+            return torch.concat((x, embedding), dim=1)
+
+    def get_baseline_embedding(self, x, c = 10000):
+        B, K, L = x.shape
+        k_range = torch.arange(K)
+        l_range = torch.arange(L // 2)
+        sin_exps = torch.sin(k_range[:, None] / c ** (2 * l_range[None, :] / k_range[:, None]))
+        cos_exps = torch.cos(k_range[:, None] / c ** ((2 * l_range[None, :] + 1) / k_range[:, None]))
+        embedding = torch.zeros((B, K, L)).to(self.device)
+        embedding[:, :, ::2] = sin_exps
+        embedding[:, :, 1::2] = cos_exps
+
+        return embedding
+
+    def get_no_embedding(self, x):
+        return torch.zeros_like(x).to(self.device)
 
 # class PeakHead(nn.Module):
 #     '''Downsample sequence further, then flatten and perform regression'''

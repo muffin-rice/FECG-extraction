@@ -138,7 +138,6 @@ DEVICE = args.device
 NUM_TRAINER_WORKERS = args.trainer_workers
 NUM_DATA_WORKERS = args.data_workers
 BATCH_SIZE = args.batch_size
-FIND_UNUSED=False
 NUM_EPOCHS = args.num_epochs
 SAMPLE_ECG_PKL = args.sample_ecg_path
 SAVE_N_STEPS = args.save_steps
