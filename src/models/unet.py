@@ -8,7 +8,7 @@ class UNet(pl.LightningModule):
     def __init__(self, sample_ecg : torch.Tensor, learning_rate : float, fecg_down_params : ((int,),),
                  fecg_up_params : ((int,),), loss_ratios : {str : int}, batch_size : int, decoder_skips : bool,
                  initial_conv_planes : int, linear_layers : (int,), pad_length : int, embed_dim : int,
-                 peak_downsamples : int, include_rnn : bool):
+                 peak_downsamples : int, include_rnn : bool, embedding_type : str, embedding_add : bool):
         # params in the format ((num_planes), (kernel_width), (stride))
         super().__init__()
 
@@ -19,7 +19,7 @@ class UNet(pl.LightningModule):
 
         self.fecg_decode = Decoder(fecg_up_params, ('tanh', 'sigmoid'), skips=decoder_skips)
 
-        self.include_rnn = include_rnn == 'True'
+        self.include_rnn = include_rnn
         if self.include_rnn:
             assert fecg_up_params[0][0] == 2*fecg_down_params[0][-1]
             self.rnn = RNN(val_dim=fecg_down_params[0][-1], batch_size=batch_size)
@@ -27,7 +27,7 @@ class UNet(pl.LightningModule):
         # for pretraining purposes, otherwise is just another conv layer
         self.value_key_proj = KeyProjector(fecg_down_params[0][-1], embed_dim)
         self.value_unprojer = KeyProjector(embed_dim, fecg_down_params[0][-1])
-        self.embedder = PositionalEmbedder()
+        self.embedder = PositionalEmbedder(positional_type = embedding_type, add= embedding_add)
 
         self.loss_params, self.batch_size = loss_ratios, batch_size
         # change dtype

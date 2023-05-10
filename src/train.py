@@ -62,7 +62,9 @@ def get_loss_param_dict():
     return {
         'fecg' : FECG_RATIO,
         'fecg_peak' : FECG_PEAK_LOSS_RATIO,
-        'fecg_peak_mask' : FECG_PEAK_CLASS_RATIO - 1
+        'fecg_peak_mask' : FECG_PEAK_CLASS_RATIO - 1,
+        'pooling_kernel' : POOLING_KERNEL,
+        'pooling_stride' : POOLING_STRIDE,
     }
 
 def make_unet(path : str = ''):
@@ -147,7 +149,8 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                                             decoder_skips=SKIP, initial_conv_planes=INITIAL_CONV_PLANES,
                                             linear_layers=LINEAR_LAYERS, pad_length=PAD_LENGTH,
                                             peak_downsamples=PEAK_DOWNSAMPLES, include_rnn=INCLUDE_RNN,
-                                            similarity = SIMILARITY,
+                                            similarity = SIMILARITY,embedding_type = EMBEDDING_TYPE,
+                                            embedding_add = EMBEDDING_ADD,
                                             )
 
     if unet_path:
@@ -165,6 +168,7 @@ def make_fecgmem(path : str = '', unet_path : str = PRETRAINED_UNET_CKPT):
                    initial_conv_planes=INITIAL_CONV_PLANES, linear_layers=LINEAR_LAYERS,
                    pad_length=PAD_LENGTH, peak_downsamples=PEAK_DOWNSAMPLES,
                    include_rnn=INCLUDE_RNN, similarity = SIMILARITY,
+                   embedding_type = EMBEDDING_TYPE, embedding_add = EMBEDDING_ADD
                    )
 
 def main(**kwargs):

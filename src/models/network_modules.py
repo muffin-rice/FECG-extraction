@@ -229,6 +229,8 @@ class PositionalEmbedder(nn.Module):
     def __init__(self, positional_type = 'none', add = True):
         super().__init__()
         self.embedding_type = positional_type
+        if self.embedding_type == 'none':
+            add = True
         self.inited = False
         self.add = add # if not add, concat
         self.get_embedding = {
@@ -248,8 +250,8 @@ class PositionalEmbedder(nn.Module):
 
     def get_baseline_embedding(self, x, c = 10000):
         B, K, L = x.shape
-        k_range = torch.arange(K)
-        l_range = torch.arange(L // 2)
+        k_range = torch.arange(K) + 1
+        l_range = torch.arange(L // 2) + 1
         sin_exps = torch.sin(k_range[:, None] / c ** (2 * l_range[None, :] / k_range[:, None]))
         cos_exps = torch.cos(k_range[:, None] / c ** ((2 * l_range[None, :] + 1) / k_range[:, None]))
         embedding = torch.zeros((B, K, L)).to(self.device)

@@ -13,7 +13,8 @@ class FECGMem(pl.LightningModule):
                  value_encoder_params : ((int,),), decoder_params : ((int,),), memory_length : int,
                  batch_size : int, learning_rate : float, loss_ratios : {str : int}, pretrained_unet : UNet,
                  decoder_skips : bool, initial_conv_planes : int, linear_layers : (int,), pad_length : int,
-                 peak_downsamples : int, include_rnn : bool, similarity : str,):
+                 peak_downsamples : int, include_rnn : bool, similarity : str, embedding_type : str,
+                 embedding_add : bool):
         super().__init__()
         similarity_dict = {
             'l2' : self.compute_l2_similarity,
@@ -22,7 +23,7 @@ class FECGMem(pl.LightningModule):
         }
 
         self.window_length = window_length
-        self.include_rnn = include_rnn == 'True'
+        self.include_rnn = include_rnn
 
         if pretrained_unet is not None:
             self.value_encoder = pretrained_unet.fecg_encode
@@ -49,7 +50,7 @@ class FECGMem(pl.LightningModule):
 
         self.key_encoder = Encoder(query_encoder_params)
         # concat the embed features
-        self.embedder = PositionalEmbedder('baseline')
+        self.embedder = PositionalEmbedder(positional_type = embedding_type, add= embedding_add)
         self.query_key_proj = KeyProjector(query_encoder_params[0][-1], embed_dim)
 
         self.embed_dim = embed_dim
@@ -183,9 +184,15 @@ class FECGMem(pl.LightningModule):
         assert torch.any(gt_fetal_peaks > 0), 'The binary fetal mask is all zeros.'
 
         fecg_loss_mse = calc_mse(recon_fecg, gt_fecg)
-        fecg_mask_loss_bce = calc_bce_loss(recon_peaks, gt_fetal_peaks)
+        pooled_recon = apply_pool(recon_peaks, pool_kernel=self.loss_params['pooling_kernel'],
+                                  pool_stride=self.loss_params['pooling_stride'])
+        pooled_orig = apply_pool(gt_fetal_peaks, pool_kernel=self.loss_params['pooling_kernel'],
+                                 pool_stride=self.loss_params['pooling_stride'])
+        fecg_mask_loss_bce = calc_bce_loss(pooled_recon, pooled_orig)
         # masked loss to weigh peaks on the bce loss
-        fecg_mask_loss_masked_bce = calc_bce_loss(recon_peaks * gt_fetal_peaks, gt_fetal_peaks)
+        pooled_recon_masked = apply_pool(recon_peaks * gt_fetal_peaks, pool_kernel=self.loss_params['pooling_kernel'],
+                                         pool_stride=self.loss_params['pooling_stride'])
+        fecg_mask_loss_masked_bce = calc_bce_loss(pooled_recon_masked, pooled_orig)
 
         # peak_loss_mse = calc_mse(recon_peaks, gt_fetal_peaks)
 

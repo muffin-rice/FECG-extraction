@@ -48,10 +48,14 @@ parser.add_argument('--val_dim', type=int, default=128,
                     help='value dimension')
 parser.add_argument('--embed_dim', type=int, default=128,
                     help='embed dimension')
-parser.add_argument('--include_rnn', type=bool, default=False,
+parser.add_argument('--include_rnn', type=str, default='False',
                     help='have rnn (either fecgmem or unet)')
 parser.add_argument('--similarity_type', type=str, default='dot',
                     help='similarity calc between query and memory')
+parser.add_argument('--embedding_type', type=str, default='none',
+                    help='positional embedding to use, none if no embedding')
+parser.add_argument('--embedding_add', type=str, default='False',
+                    help='add or concat positional embedding')
 
 # loss arguments
 parser.add_argument('--fecg_recon_loss', type=int, default=4,
@@ -60,6 +64,10 @@ parser.add_argument('--fecg_peak_loss', type=float, default=1,
                     help='weight factor for fecg peaks')
 parser.add_argument('--peak_loss_ratio', type=float, default=2,
                     help='weight factor for peak indices on fecg')
+parser.add_argument('--pooling_kernel', type=int, default=1,
+                    help='kernel to pool in final loss')
+parser.add_argument('--pooling_stride', type=int, default=1,
+                    help='stride to pool in the final loss')
 
 # sys arguments
 parser.add_argument('--model_name', type=str, default='unet_v1',
@@ -176,13 +184,17 @@ MEMORY_LENGTH = args.memory_length
 # VAL_DIM = args.val_dim
 EMBED_DIM = args.embed_dim
 PRETRAINED_UNET_CKPT = args.pretrained_unet
-INCLUDE_RNN = args.include_rnn
+INCLUDE_RNN = args.include_rnn == 'True'
 SIMILARITY = args.similarity_type
+EMBEDDING_TYPE = args.embedding_type
+EMBEDDING_ADD = args.embedding_add == 'True'
 
 # loss hyperparams (new)
 FECG_RATIO = args.fecg_recon_loss # fecg recon
 FECG_PEAK_LOSS_RATIO = args.fecg_peak_loss # fecg peak loss
 FECG_PEAK_CLASS_RATIO = args.peak_loss_ratio # how much to weigh gt peaks on the positive mask
+POOLING_KERNEL = args.pooling_kernel
+POOLING_STRIDE = args.pooling_stride
 
 # data
 DROP_LAST = args.drop_last
