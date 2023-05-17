@@ -105,11 +105,11 @@ class ECGDataset(Dataset):
             transforms.add_transform('filter', ('fecg_sig', 125, 1, 55, 3))
             desired_length = WINDOW_LENGTH * self.num_windows
             transforms.add_transform('perform_trim', (desired_length, ('mecg_sig', 'fecg_sig', 'fecg_peaks')))
-            transforms.add_transform('duplicate_keys', ('mecg_sig', 'binary_maternal_mask', 'noise'))
+            transforms.add_transform('duplicate_keys', ('mecg_sig', 'binary_maternal_mask', 'noise', 'cancelled_peak_mask'))
             transforms.add_transform('get_signal_masks', ('fetal_mask', 'binary_fetal_mask', 'fecg_sig', 'fecg_peaks'))
             transforms.add_transform('check_nans', ('mecg_sig', 'fecg_sig'))
             transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask',
-                                                      'binary_maternal_mask', 'noise'))
+                                                      'binary_maternal_mask', 'noise', 'cancelled_peak_mask'))
             transforms.add_transform('reshape_peaks', ('fecg_peaks',))
             # transforms.add_transform('print_keys', ('fecg_sig', 'mecg_sig', 'binary_fetal_mask', 'noise'))
             transforms.add_transform('scale_multiple_segments', (MF_RATIO, MF_RATIO_STD))
@@ -143,7 +143,8 @@ class ECGDataset(Dataset):
             transforms.add_transform('check_signal_shape', ('fecg_sig', 'mecg_sig'))
             transforms.add_transform('check_nans', ('fecg_sig', 'mecg_sig', 'fecg_peaks', 'binary_maternal_mask',
                                                      'binary_fetal_mask'))
-            transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask', 'binary_maternal_mask', 'noise'))
+            transforms.add_transform('reshape_keys', ('mecg_sig', 'fecg_sig', 'binary_fetal_mask', 'binary_maternal_mask',
+                                                      'noise', 'cancelled_peak_mask'))
             transforms.add_transform('reshape_peaks', ('fecg_peaks',))
             transforms.add_transform('scale_multiple_segments', (MF_RATIO, MF_RATIO_STD))
             transforms.add_transform('pop_keys', ('maternal_mask', 'fetal_mask', 'num_windows', 'binary_maternal_mask'))

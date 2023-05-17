@@ -257,7 +257,9 @@ class Transforms:
         peak_key = 'fecg_peaks'
         noise_key = 'noise'
         sig_key = 'fecg_sig'
+        storage_key = 'cancelled_peak_mask'
         peaks_to_cancel = []
+        signal_dict[storage_key] = np.zeros(signal_dict[sig_key].shape)
         for peak in signal_dict[peak_key]:
             if random.random() < chance:
                 peaks_to_cancel.append(peak)
@@ -268,6 +270,7 @@ class Transforms:
         for cancel_peak in peaks_to_cancel:
             signal_dict[noise_key][0, cancel_peak - window_rad : cancel_peak + window_rad] -= \
                 signal_dict[sig_key][0, cancel_peak - window_rad : cancel_peak + window_rad]
+            signal_dict[storage_key][0, cancel_peak] = 1
 
     def vary_signal_strength(self, signal_dict, signal_to_vary, strength_std):
         vary_length = signal_dict[signal_to_vary].shape[-1]

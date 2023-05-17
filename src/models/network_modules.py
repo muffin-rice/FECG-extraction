@@ -1,5 +1,6 @@
 from torch import nn
 import torch
+import math
 
 class Encoder(nn.Module):
     def __init__(self, down_params : ((int,),), encoder_skip : bool = False):
@@ -158,6 +159,9 @@ class RNN(nn.Module):
     def _reinitialize(self, seq_length, device):
         self.hidden_state = torch.zeros(self.batch_size, self.val_dim, seq_length).to(device)
 
+    def change_batch_size(self, batch_size):
+        self.batch_size = batch_size
+
     def forward(self, value):
         total_hidden = torch.concatenate((self.hidden_state, value), dim=1) # concat along feature dim
 
@@ -250,13 +254,15 @@ class PositionalEmbedder(nn.Module):
 
     def get_baseline_embedding(self, x, c = 10000):
         B, K, L = x.shape
-        k_range = torch.arange(K) + 1
-        l_range = torch.arange(L // 2) + 1
-        sin_exps = torch.sin(k_range[:, None] / c ** (2 * l_range[None, :] / k_range[:, None]))
-        cos_exps = torch.cos(k_range[:, None] / c ** ((2 * l_range[None, :] + 1) / k_range[:, None]))
+        if K == 1:
+            K = 2
+        k_range = torch.arange(K // 2) + 1
+        l_range = torch.arange(L)
+        sin_exps = torch.sin(l_range[None, :] / c ** (2 * k_range[:, None] / K))
+        cos_exps = torch.cos(l_range[None, :] / c ** ((2 * k_range[:, None] + 1) / K))
         embedding = torch.zeros((B, K, L)).to(self.device)
-        embedding[:, :, ::2] = sin_exps
-        embedding[:, :, 1::2] = cos_exps
+        embedding[:, ::2, :] = sin_exps
+        embedding[:, 1::2, :] = cos_exps
 
         return embedding
 

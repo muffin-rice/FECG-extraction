@@ -65,6 +65,7 @@ def get_loss_param_dict():
         'fecg_peak_mask' : FECG_PEAK_CLASS_RATIO - 1,
         'pooling_kernel' : POOLING_KERNEL,
         'pooling_stride' : POOLING_STRIDE,
+        'fecg_cancelled_peaks' : max(FECG_CANCELLED_RATIO - FECG_PEAK_CLASS_RATIO, 0),
     }
 
 def make_unet(path : str = ''):

@@ -64,6 +64,17 @@ class FECGMem(pl.LightningModule):
         else:
             raise NotImplementedError(f'Similarity {similarity} not implemented')
 
+        if embedding_type != 'none':
+            self.additional_query_convs = nn.Sequential(*[
+                nn.Conv1d(2*query_encoder_params[0][-1], query_encoder_params[0][-1], kernel_size=3, stride=1, padding='same'),
+                nn.BatchNorm1d(query_encoder_params[0][-1]),
+                nn.LeakyReLU(0.1, inplace=True),
+                nn.Conv1d(query_encoder_params[0][-1], query_encoder_params[0][-1], kernel_size=3, stride=1, padding='same'),
+                nn.BatchNorm1d(query_encoder_params[0][-1]),
+                nn.LeakyReLU(inplace=True, negative_slope=0.1),
+            ])
+        else:
+            self.additional_query_convs = nn.Identity()
         self.float()
 
     def move_device(self):
@@ -89,6 +100,7 @@ class FECGMem(pl.LightningModule):
         return encoded_key[-1], encoded_key
 
     def get_query_projection(self, query):
+        query = self.additional_query_convs(self.embedder(query))
         return self.query_key_proj(query)
 
     def get_value_projection(self, value):
@@ -174,30 +186,34 @@ class FECGMem(pl.LightningModule):
         # return all the losses with hyperparameters defined earlier
         return self.loss_params['fecg'] * torch.sum(results['loss_fecg_mse']) / self.batch_size + \
                self.loss_params['fecg_peak'] * torch.sum(results['loss_peaks_bce']) / self.batch_size + \
-               self.loss_params['fecg_peak_mask'] * self.loss_params['fecg_peak'] * torch.sum(results['loss_peaks_bce_masked']) / self.batch_size
+               self.loss_params['fecg_peak_mask'] * self.loss_params['fecg_peak'] * torch.sum(results['loss_peaks_bce_masked']) / self.batch_size + \
+               self.loss_params['fecg_cancelled_peaks'] * self.loss_params['fecg_peak'] * torch.sum(results['loss_cancelled_peaks_bce']) / self.batch_size
         # self.loss_params['fecg_peak'] * torch.sum(results['loss_peaks_mse']) / self.batch_size
 
     def calculate_losses_into_dict(self, recon_fecg: torch.Tensor, gt_fecg: torch.Tensor, recon_peaks: torch.Tensor,
-                                   gt_fetal_peaks: torch.Tensor) -> {str: torch.Tensor}:
+                                   gt_fetal_peaks: torch.Tensor, cancelled_peak_mask : torch.Tensor) -> {str: torch.Tensor}:
         # If necessary: peak-weighted losses, class imablance in BCE loss
 
         assert torch.any(gt_fetal_peaks > 0), 'The binary fetal mask is all zeros.'
 
         fecg_loss_mse = calc_mse(recon_fecg, gt_fecg)
-        pooled_recon = apply_pool(recon_peaks, pool_kernel=self.loss_params['pooling_kernel'],
-                                  pool_stride=self.loss_params['pooling_stride'])
-        pooled_orig = apply_pool(gt_fetal_peaks, pool_kernel=self.loss_params['pooling_kernel'],
+        pooler = lambda x : apply_pool(x, pool_kernel=self.loss_params['pooling_kernel'],
                                  pool_stride=self.loss_params['pooling_stride'])
+        pooled_recon = pooler(recon_peaks)
+        pooled_orig = pooler(gt_fetal_peaks)
+        pooled_cancelled = pooler(cancelled_peak_mask)
+
         fecg_mask_loss_bce = calc_bce_loss(pooled_recon, pooled_orig)
         # masked loss to weigh peaks on the bce loss
-        pooled_recon_masked = apply_pool(recon_peaks * gt_fetal_peaks, pool_kernel=self.loss_params['pooling_kernel'],
-                                         pool_stride=self.loss_params['pooling_stride'])
-        fecg_mask_loss_masked_bce = calc_bce_loss(pooled_recon_masked, pooled_orig)
+        fecg_mask_loss_masked_bce = fecg_mask_loss_bce * pooled_orig
+        # masked on the cancelled peaks
+        fecg_mask_cancel_loss_bce = fecg_mask_loss_bce * pooled_cancelled
 
         # peak_loss_mse = calc_mse(recon_peaks, gt_fetal_peaks)
 
         aggregate_loss = {'loss_fecg_mse': fecg_loss_mse, 'loss_peaks_bce': fecg_mask_loss_bce,
-                          'loss_peaks_bce_masked': fecg_mask_loss_masked_bce}
+                          'loss_peaks_bce_masked': fecg_mask_loss_masked_bce,
+                          'loss_cancelled_peaks_bce' : fecg_mask_cancel_loss_bce}
 
         loss_dict = {}
 
@@ -208,6 +224,9 @@ class FECGMem(pl.LightningModule):
         loss_dict.update({k: torch.sum(loss) / self.batch_size for k, loss in aggregate_loss.items()})
 
         return loss_dict
+
+    def reset_memory(self):
+        self.memory.abolish_memory()
 
     def forward(self, aecg_sig : torch.Tensor) -> {str : torch.Tensor}:
         '''data in the format of B x num_windows (set at 100 during training) x window_size'''
@@ -260,7 +279,7 @@ class FECGMem(pl.LightningModule):
 
         old_memory = self.memory.get_memory_copy()
 
-        self.memory.abolish_memory()
+        self.reset_memory()
 
         return {'fecg_recon' : fecg_recon, 'fecg_peak_recon' : fecg_peak_recon, 'features' : old_memory}
 
@@ -307,7 +326,7 @@ class FECGMem(pl.LightningModule):
             fecg_recon = guess[0][:, 0, :self.window_length]
             fecg_peak_recon = guess[1][:, 0, :self.window_length]
 
-        self.memory.abolish_memory()
+        self.reset_memory()
 
         return {'fecg_recon': fecg_recon, 'fecg_peak_recon': fecg_peak_recon}
 
@@ -322,13 +341,14 @@ class FECGMem(pl.LightningModule):
         self.move_device()
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise'] - d['offset']
         # performs backwards on the last segment only to avoid inplace operations with the masking
-        # self.peak_shape = d['fecg_peaks'].shape
+
         model_output = self.train_forward(aecg_sig)
 
         try:
             loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'], d['fecg_sig'][:, -1, :],
                                                         model_output['fecg_peak_recon'],
-                                                        d['binary_fetal_mask'][:, -1, :])  # d['fecg_peaks'][:,-1,:])
+                                                        d['binary_fetal_mask'][:, -1, :],
+                                                        d['cancelled_peak_mask'][:,-1,:])  # d['fecg_peaks'][:,-1,:])
         except Exception as e:
             print(f'{d["fname"]} failed somehow:')
             import pickle as pkl
@@ -344,11 +364,12 @@ class FECGMem(pl.LightningModule):
         self.move_device()
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise'] - d['offset']
-        # self.peak_shape = d['fecg_peaks'].shape
+
         model_output = self.forward(aecg_sig)
 
         loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'][:,-1,:], d['fecg_sig'][:,-1,:],
-                                                    model_output['fecg_peak_recon'][:,-1,:],  d['binary_fetal_mask'][:,-1,:]) # d['fecg_peaks'])
+                                                    model_output['fecg_peak_recon'][:,-1,:],  d['binary_fetal_mask'][:,-1,:],
+                                                    d['cancelled_peak_mask'][:,-1,:]) # d['fecg_peaks'])
 
         self.log_dict({f'val_{k}': v for k, v in loss_dict.items()}, sync_dist=True, batch_size=self.batch_size)
         model_output.update(loss_dict)
@@ -359,11 +380,12 @@ class FECGMem(pl.LightningModule):
         self.move_device()
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise'] - d['offset']
-        # self.peak_shape = d['fecg_peaks'].shape
+
         model_output = self.forward(aecg_sig)
 
         loss_dict = self.calculate_losses_into_dict(model_output['fecg_recon'][:,-1,:], d['fecg_sig'][:,-1,:],
-                                                    model_output['fecg_peak_recon'][:,-1,:], d['binary_fetal_mask'][:,-1,:]) # d['fecg_peaks'])
+                                                    model_output['fecg_peak_recon'][:,-1,:], d['binary_fetal_mask'][:,-1,:],
+                                                    d['cancelled_peak_mask'][:,-1,:]) # d['fecg_peaks'])
 
         model_output.update(loss_dict)
 
@@ -382,3 +404,5 @@ class FECGMem(pl.LightningModule):
 
     def change_batch_size(self, batch_size):
         self.batch_size = batch_size
+        if self.include_rnn:
+            self.rnn.change_batch_size(batch_size)

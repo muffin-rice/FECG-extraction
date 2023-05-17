@@ -64,6 +64,8 @@ parser.add_argument('--fecg_peak_loss', type=float, default=1,
                     help='weight factor for fecg peaks')
 parser.add_argument('--peak_loss_ratio', type=float, default=2,
                     help='weight factor for peak indices on fecg')
+parser.add_argument('--cancelled_peak_ratio', type=float, default=2,
+                    help='weight factor for peaks that are muted')
 parser.add_argument('--pooling_kernel', type=int, default=1,
                     help='kernel to pool in final loss')
 parser.add_argument('--pooling_stride', type=int, default=1,
@@ -171,7 +173,7 @@ MEMORY_DOWN_STRIDES = tuple(args.down_strides2)
 UP_PLANES = tuple(args.up_planes)
 UP_KERNELS = tuple(args.up_kernels)
 UP_STRIDES = tuple(args.up_strides)
-assert len(UP_PLANES) == len(VALUE_DOWN_PLANES)
+assert len(UP_PLANES) == len(VALUE_DOWN_PLANES), f'{UP_PLANES}, {VALUE_DOWN_PLANES}'
 SKIP = args.skips
 # peak head parameters
 INITIAL_CONV_PLANES = args.initial_conv
@@ -193,6 +195,7 @@ EMBEDDING_ADD = args.embedding_add == 'True'
 FECG_RATIO = args.fecg_recon_loss # fecg recon
 FECG_PEAK_LOSS_RATIO = args.fecg_peak_loss # fecg peak loss
 FECG_PEAK_CLASS_RATIO = args.peak_loss_ratio # how much to weigh gt peaks on the positive mask
+FECG_CANCELLED_RATIO = args.cancelled_peak_ratio
 POOLING_KERNEL = args.pooling_kernel
 POOLING_STRIDE = args.pooling_stride
 
