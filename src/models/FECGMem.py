@@ -2,7 +2,7 @@ import torch
 from torch import nn, optim
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from .network_modules import Encoder, KeyProjector, Decoder, NaiveMemory, RNN, PositionalEmbedder#, PeakHead
+from .network_modules import *
 from numpy import sqrt
 from .losses import *
 from .unet import UNet
@@ -12,7 +12,7 @@ class FECGMem(pl.LightningModule):
     def __init__(self, sample_ecg, window_length, query_encoder_params : ((int,),), embed_dim : int,
                  value_encoder_params : ((int,),), decoder_params : ((int,),), memory_length : int,
                  batch_size : int, learning_rate : float, loss_ratios : {str : int}, pretrained_unet : UNet,
-                 decoder_skips : bool, initial_conv_planes : int, linear_layers : (int,), pad_length : int,
+                 decoder_skis : bool, initial_conv_planes : int, linear_layers : (int,), pad_length : int,
                  peak_downsamples : int, include_rnn : bool, similarity : str, embedding_type : str,
                  embedding_add : bool):
         super().__init__()
@@ -58,7 +58,8 @@ class FECGMem(pl.LightningModule):
         self.loss_params = loss_ratios
         self.learning_rate = learning_rate
         self.pad_length = pad_length
-        self.memory = NaiveMemory(self.device, memory_length, embed_dim)
+        # self.memory = NaiveMemory(self.device, memory_length, embed_dim)
+        self.memory = MemoryRanker(self.device, memory_length, embed_dim)
         if similarity in similarity_dict:
             self.compute_similarity = similarity_dict[similarity]
         else:
@@ -136,6 +137,8 @@ class FECGMem(pl.LightningModule):
         affinity = self.compute_affinity(query)
         softmax_aff = self.softmax_affinity(affinity)
 
+        self.memory.process_affinity(softmax_aff)
+
         memory_value = self.memory.get_value_memory()
 
         assert memory_value.shape[2] == softmax_aff.shape[1], f'Shapes misaligned: {memory_value.shape}, {softmax_aff.shape}'
@@ -170,14 +173,14 @@ class FECGMem(pl.LightningModule):
 
     def softmax_affinity(self, affinity : torch.Tensor) -> torch.Tensor:
         '''softmaxes affinity matrix S across second dimension
-        output is softmaxed B x NQk '''
+        output is softmaxed B x NQk x Qk'''
         softmaxed = nn.Softmax(dim=1)(affinity)
         return softmaxed
 
     def compute_affinity(self, query : torch.Tensor) -> torch.Tensor:
         '''computes affinity between current query and key in memory
         currently uses dot product
-        output is B x Qk x NQk'''
+        output is B x NQk x Qk'''
         # input is B x Ck x W, output is B x Qk x NQk
         key_memory = self.memory.get_key_memory()
         return self.compute_similarity(query, key_memory) / sqrt(self.embed_dim)
@@ -318,6 +321,11 @@ class FECGMem(pl.LightningModule):
             query_proj = self.get_query_projection(query)
             self.add_to_memory(query_proj, value_proj)
 
+            affinity = self.compute_affinity(query_proj)
+            softmax_aff = self.softmax_affinity(affinity)
+
+            self.memory.process_affinity(softmax_aff) # additional code to process affinity
+
         else:
             memory_value = self.retrieve_memory_value(query_proj)
             guess = self.decode_value(memory_value, value_outs, rnn_value)
@@ -361,6 +369,10 @@ class FECGMem(pl.LightningModule):
         return loss_dict['total_loss']
 
     def validation_step(self, d : {}, batch_idx):
+        # eval with 1 kernel and 1 stride
+        old_kernel, old_stride = self.loss_params['pooling_kernel'], self.loss_params['pooling_stride']
+        self.loss_params['pooling_kernel'], self.loss_params['pooling_stride'] = 1, 1
+
         self.move_device()
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise'] - d['offset']
@@ -374,9 +386,14 @@ class FECGMem(pl.LightningModule):
         self.log_dict({f'val_{k}': v for k, v in loss_dict.items()}, sync_dist=True, batch_size=self.batch_size)
         model_output.update(loss_dict)
 
+        self.loss_params['pooling_kernel'], self.loss_params['pooling_stride'] = old_kernel, old_stride
+
         return model_output
 
     def test_step(self, d : {}, batch_idx):
+        old_kernel, old_stride = self.loss_params['pooling_kernel'], self.loss_params['pooling_stride']
+        self.loss_params['pooling_kernel'], self.loss_params['pooling_stride'] = 1, 1
+
         self.move_device()
         self.convert_to_float(d)
         aecg_sig = d['mecg_sig'] + d['fecg_sig'] + d['noise'] - d['offset']
@@ -388,6 +405,8 @@ class FECGMem(pl.LightningModule):
                                                     d['cancelled_peak_mask'][:,-1,:]) # d['fecg_peaks'])
 
         model_output.update(loss_dict)
+
+        self.loss_params['pooling_kernel'], self.loss_params['pooling_stride'] = old_kernel, old_stride
 
         return model_output
 

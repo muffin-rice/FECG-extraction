@@ -2,6 +2,22 @@ from torch import nn
 import torch
 import math
 
+class EncoderBlock(nn.Module):
+    def __init__(self, input_channels : int, output_channels : int, kernel_size : int = 4, stride : int = 2,):
+        super().__init__()
+        self.conv1 = nn.Conv1d(input_channels, output_channels, kernel_size, stride)
+        self.bn1 = nn.BatchNorm1d(output_channels)
+        self.lr1 = nn.LeakyReLU(0.1, inplace=True)
+        self.conv2 = nn.Conv1d(output_channels, output_channels, kernel_size=3, stride=1, padding='same')
+        self.bn2 = nn.BatchNorm1d(output_channels)
+        self.lr2 = nn.LeakyReLU(inplace=True, negative_slope=0.1)
+
+    def forward(self, x):
+        x = self.lr1(self.bn1(self.conv1(x)))
+        y = self.lr2(self.bn2(self.conv2(x)))
+
+        return x+y
+
 class Encoder(nn.Module):
     def __init__(self, down_params : ((int,),), encoder_skip : bool = False):
         # params in the format ((num_planes), (kernel_width), (stride))
@@ -11,29 +27,13 @@ class Encoder(nn.Module):
 
         self.encodes = nn.ParameterList()
         for i in range(len(down_params[0]) - 1):
-            self.encodes.append(self.make_encoder_block(down_params[0][i], down_params[0][i + 1],
-                                                            kernel_size=down_params[1][i], stride=down_params[2][i]))
+            self.encodes.append(EncoderBlock(input_channels= down_params[0][i], output_channels= down_params[0][i + 1],
+                                             kernel_size=down_params[1][i], stride=down_params[2][i]))
 
     def make_skip_connection(self, a, b):
         '''makes a skip connection and applies leaky relu'''
         b_shape = b.shape
         return self.leaky(a[:, :, :b_shape[2]]+b)
-
-    def make_encoder_block(self, input_channels : int, output_channels : int, kernel_size : int = 4, stride : int = 2,
-                           final_layer : bool = False):
-        if not final_layer:
-            return nn.Sequential(
-                nn.Conv1d(input_channels, output_channels, kernel_size, stride),
-                nn.BatchNorm1d(output_channels),
-                nn.LeakyReLU(0.1, inplace=True),
-                nn.Conv1d(output_channels, output_channels, kernel_size=3, stride=1, padding='same'),
-                nn.BatchNorm1d(output_channels),
-                nn.LeakyReLU(inplace=True, negative_slope=0.1),
-            )
-        else:
-            return nn.Sequential(
-                nn.Conv1d(input_channels, output_channels, kernel_size, stride),
-            )
 
     def freeze(self):
         for param in self.parameters():
@@ -223,11 +223,94 @@ class NaiveMemory:
     def is_memory_initialized(self):
         return self.memory_initialized
 
+    def process_affinity(self, affinity : torch.Tensor) -> None:
+        pass
+
     def abolish_memory(self):
         del self.key_memory
         del self.value_memory
         self.memory_initialized = False
         self.memory_iteration = 0
+
+class MemoryRanker:
+    '''Naive memory is just storing the memory as a plain matrix without any sophisticated
+    memory management'''
+    def __init__(self, device, memory_length, embed_dim):
+        self.device = device
+        self.memory_initialized = False
+        self.memory_length = memory_length
+        self.embed_dim = embed_dim
+        self.indices_to_replace = None
+        self.memory_is_full = False
+
+    def _reinitialize_memory(self, batch_size, seq_length, ):
+        '''initializes the key and value memories
+                memory has shape B x K x N * P'''
+        self.seq_length = seq_length
+        self.key_memory = torch.zeros((batch_size, self.embed_dim, self.memory_length * seq_length)).to(self.device)
+        self.value_memory = torch.zeros((batch_size, self.embed_dim, self.memory_length * seq_length)).to(self.device)
+
+        self.memory_initialized = True
+        self.memory_iteration = 0
+
+    def add_to_memory(self, memory_value : torch.Tensor, memory_key : torch.Tensor):
+        '''adds value/key to memory'''
+        assert self.memory_initialized
+        if self.memory_iteration < self.memory_length:
+            start_i = self.memory_iteration * self.seq_length
+            self.key_memory[:, :, start_i : start_i + self.seq_length] = memory_key
+            self.value_memory[:, :, start_i : start_i + self.seq_length] = memory_value
+        else:
+            assert self.memory_is_full
+            assert self.indices_to_replace is not None
+            batch_size = memory_key.shape[0]
+            temp_km = self.key_memory.view((batch_size, self.embed_dim, self.memory_length, self.seq_length))
+            temp_vm = self.key_memory.view((batch_size, self.embed_dim, self.memory_length, self.seq_length))
+
+            temp_km[torch.arange(batch_size), :, self.indices_to_replace, :] = memory_key
+            temp_vm[torch.arange(batch_size), :, self.indices_to_replace, :] = memory_value
+            # self.key_memory[torch.arange(batch_size),:,self.indices_to_replace] = memory_key
+            # self.value_memory[torch.arange(batch_size),:,self.indices_to_replace] = memory_value
+
+        self.memory_iteration += 1
+        if self.memory_iteration >= self.memory_length:
+            self.memory_is_full = True
+
+    def get_key_memory(self) -> torch.Tensor:
+        '''returns value memory in shape of B x QK x N*P'''
+        return self.key_memory
+
+    def get_value_memory(self) -> torch.Tensor:
+        '''returns value memory in shape of B x Vk x N*P'''
+        return self.value_memory
+
+    def get_memory_copy(self):
+        return torch.clone(self.key_memory).cpu(), torch.clone(self.value_memory).cpu()
+
+    def is_memory_initialized(self):
+        return self.memory_initialized
+
+    def process_affinity(self, affinity : torch.Tensor) -> None:
+        '''should be called after computing affinity; removes an entry from memory'''
+        # softmaxed affinity as a B x NQk x Qk
+        B, NQk, Qk = affinity.shape
+        if not self.memory_is_full:
+            return
+
+        reshaped_aff = affinity.transpose(1,2).resize(B, self.memory_length, Qk, Qk)
+
+        # rank reshaped_aff
+        summed_aff = reshaped_aff.sum(dim=(2,3)) # size B x N, sort
+
+        self.indices_to_replace = summed_aff.argmin(dim=1)
+
+    def abolish_memory(self):
+        del self.key_memory
+        del self.value_memory
+        self.memory_initialized = False
+        self.memory_iteration = 0
+        self.indices_to_replace = None
+        self.memory_is_full = False
 
 class PositionalEmbedder(nn.Module):
     def __init__(self, positional_type = 'none', add = True):
